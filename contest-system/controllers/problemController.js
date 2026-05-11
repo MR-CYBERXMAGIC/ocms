@@ -224,6 +224,16 @@ const addProblem = async (req, res) => {
       [contestId, problemId, nextLabel]
     );
 
+    // Fetch title for SSE broadcast
+    const { rows: titleRows } = await pool.query(
+      `SELECT title FROM problems WHERE id = $1`, [problemId]
+    );
+    global.broadcastToContest(Number(contestId), 'problem_added', {
+      problem_id: problemId,
+      label:      nextLabel,
+      title:      titleRows[0]?.title || '',
+    });
+
     res.status(201).json({ problem_id: problemId, label: nextLabel });
   } catch (err) {
     console.error('addProblem error:', err.message);
@@ -237,9 +247,10 @@ const removeProblem = async (req, res) => {
   const { problemId } = req.params;
   const userId     = req.session.userId;
 
+  const client = await pool.connect();
   try {
-    const { rows: contestRows } = await pool.query(
-      `SELECT created_by, start_time FROM contests WHERE id = $1`,
+    const { rows: contestRows } = await client.query(
+      `SELECT created_by, start_time, is_ended FROM contests WHERE id = $1`,
       [contestId]
     );
     if (!contestRows.length) return res.status(404).json({ error: 'Contest not found' });
@@ -248,20 +259,65 @@ const removeProblem = async (req, res) => {
     if (Number(contest.created_by) !== Number(userId)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    if (new Date(contest.start_time) <= new Date()) {
-      return res.status(403).json({ error: 'Cannot remove problems after the contest has started' });
+    if (contest.is_ended) {
+      return res.status(403).json({ error: 'Cannot modify problems after the contest has ended' });
     }
 
-    const { rowCount } = await pool.query(
+    // Get the label before deleting
+    const { rows: cpRows } = await client.query(
+      `SELECT label FROM contest_problems WHERE contest_id = $1 AND problem_id = $2`,
+      [contestId, problemId]
+    );
+    if (!cpRows.length) return res.status(404).json({ error: 'Problem not found in this contest' });
+    const removedLabel = cpRows[0].label;
+
+    await client.query('BEGIN');
+
+    // Delete submissions for this problem in this contest
+    await client.query(
+      `DELETE FROM submissions WHERE contest_id = $1 AND problem_id = $2`,
+      [contestId, problemId]
+    );
+
+    // Remove from contest_problems
+    await client.query(
       `DELETE FROM contest_problems WHERE contest_id = $1 AND problem_id = $2`,
       [contestId, problemId]
     );
-    if (rowCount === 0) return res.status(404).json({ error: 'Problem not found in this contest' });
+
+    // Re-label remaining problems sequentially (A, B, C…)
+    const { rows: remaining } = await client.query(
+      `SELECT problem_id FROM contest_problems WHERE contest_id = $1 ORDER BY label ASC`,
+      [contestId]
+    );
+    for (let i = 0; i < remaining.length; i++) {
+      const newLabel = String.fromCharCode('A'.charCodeAt(0) + i);
+      await client.query(
+        `UPDATE contest_problems SET label = $1 WHERE contest_id = $2 AND problem_id = $3`,
+        [newLabel, contestId, remaining[i].problem_id]
+      );
+    }
+
+    // Recalculate scores if contest has started
+    const isStarted = new Date(contest.start_time) <= new Date();
+    if (isStarted) {
+      await client.query(`CALL recalculate_contest_scores($1)`, [contestId]);
+    }
+
+    await client.query('COMMIT');
+
+    global.broadcastToContest(Number(contestId), 'problem_deleted', {
+      problem_id: Number(problemId),
+      label:      removedLabel,
+    });
 
     res.json({ message: 'Problem removed' });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('removeProblem error:', err.message);
     res.status(500).json({ error: 'Failed to remove problem' });
+  } finally {
+    client.release();
   }
 };
 

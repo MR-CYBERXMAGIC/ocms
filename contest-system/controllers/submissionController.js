@@ -34,11 +34,14 @@ const submitSolution = async (req, res) => {
     }
 
     const { rows: partRows } = await pool.query(
-      `SELECT 1 FROM contest_participants WHERE contest_id = $1 AND user_id = $2`,
+      `SELECT is_blocked FROM contest_participants WHERE contest_id = $1 AND user_id = $2`,
       [contestId, userId]
     );
     if (!partRows.length) {
       return res.status(403).json({ error: 'You must join the contest before submitting' });
+    }
+    if (partRows[0].is_blocked) {
+      return res.status(403).json({ error: 'You have been blocked from this contest' });
     }
 
     const { rows: pRows } = await pool.query(

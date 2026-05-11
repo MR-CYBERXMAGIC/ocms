@@ -12,6 +12,29 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ------------------------------------------------------------------
+// SSE client registry — must be defined before routes load
+// ------------------------------------------------------------------
+const contestClients = {};
+
+global.broadcastToContest = function(contestId, event, data) {
+  const clients = contestClients[contestId];
+  if (!clients) return;
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of Object.values(clients)) {
+    try { res.write(msg); } catch (_) {}
+  }
+};
+
+global.addSSEClient = (cid, id, res) => {
+  if (!contestClients[cid]) contestClients[cid] = {};
+  contestClients[cid][id] = res;
+};
+
+global.removeSSEClient = (cid, id) => {
+  if (contestClients[cid]) delete contestClients[cid][id];
+};
+
+// ------------------------------------------------------------------
 // Core middleware
 // ------------------------------------------------------------------
 app.use(cors());
@@ -68,6 +91,25 @@ app.get('/api/health', async (req, res) => {
     res.status(500).json({ status: 'error', db: 'disconnected', error: err.message });
   }
 });
+
+// ------------------------------------------------------------------
+// 5-minute pre-end warning broadcasts (runs every 60 s)
+// ------------------------------------------------------------------
+setInterval(async () => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id FROM contests
+      WHERE is_ended = FALSE
+        AND start_time <= NOW()
+        AND (start_time + (duration_minutes || ' minutes')::interval)
+              BETWEEN NOW() + interval '4 minutes 30 seconds'
+              AND     NOW() + interval '5 minutes 30 seconds'
+    `);
+    for (const c of rows) {
+      global.broadcastToContest(c.id, 'contest_warning', { message: '5 minutes remaining!' });
+    }
+  } catch (_) {}
+}, 60000);
 
 // ------------------------------------------------------------------
 // Start

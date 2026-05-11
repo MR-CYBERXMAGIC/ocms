@@ -28,13 +28,27 @@ const getLeaderboard = async (req, res) => {
 
     // Problem list for column headers
     const { rows: problemRows } = await pool.query(
-      `SELECT cp.label, p.title
+      `SELECT cp.label, p.id, p.title
        FROM contest_problems cp
        JOIN problems p ON p.id = cp.problem_id
        WHERE cp.contest_id = $1
        ORDER BY cp.label ASC`,
       [contestId]
     );
+
+    // First solver per problem (earliest AC submission)
+    const { rows: firstSolverRows } = await pool.query(
+      `SELECT DISTINCT ON (problem_id) problem_id, user_id, u.username
+       FROM submissions s
+       JOIN users u ON u.id = s.user_id
+       WHERE contest_id = $1 AND verdict = 'Accepted'
+       ORDER BY problem_id, submitted_at ASC`,
+      [contestId]
+    );
+    const first_solvers = {};
+    for (const row of firstSolverRows) {
+      first_solvers[row.problem_id] = { user_id: row.user_id, username: row.username };
+    }
 
     // Main query — one row per (participant × problem).
     // LEFT JOIN ... ON TRUE behaves like CROSS JOIN but preserves participant rows
@@ -167,6 +181,7 @@ const getLeaderboard = async (req, res) => {
       },
       problems: problemRows,
       leaderboard,
+      first_solvers,
     });
   } catch (err) {
     console.error('getLeaderboard error:', err.message);

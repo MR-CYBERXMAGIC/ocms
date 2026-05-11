@@ -158,9 +158,11 @@
 
       <!-- Tabs -->
       <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('submissions', this)">All Submissions</button>
-        <button class="tab-btn"        onclick="switchTab('stats',       this)">Problem Stats</button>
-        <button class="tab-btn"        onclick="switchTab('edit',        this)">Edit Contest</button>
+        <button class="tab-btn active" onclick="switchTab('submissions',  this)">All Submissions</button>
+        <button class="tab-btn"        onclick="switchTab('stats',        this)">Problem Stats</button>
+        <button class="tab-btn"        onclick="switchTab('participants', this)" id="tab-btn-participants">Participants</button>
+        <button class="tab-btn"        onclick="switchTab('problems',     this)" id="tab-btn-problems">Problems</button>
+        <button class="tab-btn"        onclick="switchTab('edit',         this)">Edit Contest</button>
       </div>
 
       <!-- ===== Tab 1: All Submissions ===== -->
@@ -225,13 +227,73 @@
         </div>
       </div>
 
-      <!-- ===== Tab 3: Edit Contest ===== -->
+      <!-- ===== Tab 3: Participants ===== -->
+      <div id="tab-participants" class="tab-pane">
+        <div class="card">
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Full Name</th>
+                  <th style="width:110px;text-align:center;">Solved</th>
+                  <th style="width:110px;text-align:center;">Penalty</th>
+                  <th style="width:90px;text-align:center;">Status</th>
+                  <th style="width:160px;text-align:center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="participants-tbody">
+                <tr class="empty-row"><td colspan="6">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Tab 4: Problems ===== -->
+      <div id="tab-problems" class="tab-pane">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem;">
+          <button onclick="openAddProblem()" class="btn btn-primary btn-sm">+ Add Problem</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:60px;">Label</th>
+                  <th>Title</th>
+                  <th style="width:100px;">Type</th>
+                  <th style="width:100px;">Platform</th>
+                  <th style="width:90px;"></th>
+                </tr>
+              </thead>
+              <tbody id="mproblems-tbody">
+                <tr class="empty-row"><td colspan="5">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Tab 5: Edit Contest ===== -->
       <div id="tab-edit" class="tab-pane">
         <div class="card" style="max-width:540px;">
           <div class="card-header"><h3>Contest Details</h3></div>
           <div class="card-body">
             <div id="edit-alert" class="hidden" style="margin-bottom:1rem;"></div>
             <form id="edit-form" onsubmit="saveEdit(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Start Time <span style="font-size:0.75rem;color:var(--text-muted);">(read-only)</span></label>
+                  <input type="text" id="edit-start-time" class="form-control" disabled
+                         style="background:var(--sidebar-bg);color:var(--text-muted);">
+                </div>
+                <div class="form-group">
+                  <label>Duration <span style="font-size:0.75rem;color:var(--text-muted);">(read-only)</span></label>
+                  <input type="text" id="edit-duration" class="form-control" disabled
+                         style="background:var(--sidebar-bg);color:var(--text-muted);">
+                </div>
+              </div>
               <div class="form-group">
                 <label>Contest Name</label>
                 <input type="text" id="edit-name" class="form-control" required>
@@ -368,8 +430,30 @@
   </div>
 </div>
 
+<!-- ===== Delete Problem confirmation modal ===== -->
+<div id="delete-modal" class="modal-overlay hidden" onclick="closeDeleteModal(event)">
+  <div class="modal-box" style="max-width:420px;">
+    <button class="modal-close" onclick="document.getElementById('delete-modal').classList.add('hidden')">✕</button>
+    <h3>Remove Problem</h3>
+    <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;">
+      Remove problem <strong id="delete-prob-label"></strong>:
+      <span id="delete-prob-title" style="font-style:italic;"></span>
+    </p>
+    <p style="color:#c53030;font-size:0.8rem;margin-bottom:1.25rem;">
+      All submissions for this problem in this contest will be deleted and scores recalculated.
+    </p>
+    <div id="delete-alert" class="hidden" style="margin-bottom:0.75rem;"></div>
+    <div style="display:flex;gap:0.75rem;">
+      <button onclick="confirmDeleteProblem()" id="delete-confirm-btn" class="btn btn-danger btn-sm">Delete</button>
+      <button onclick="document.getElementById('delete-modal').classList.add('hidden')"
+              class="btn btn-sm" style="background:var(--border);color:var(--text);">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script src="/js/toast.js"></script>
 <script src="/js/api.js"></script>
+<script src="/js/sse.js"></script>
 <script>
 const params    = new URLSearchParams(location.search);
 const contestId = params.get('id');
@@ -389,7 +473,10 @@ async function doLogout() {
 async function init() {
   try {
     const authData = await apiFetch('/auth/me');
-    if (authData) document.getElementById('nav-username').textContent = authData.user.username;
+    if (authData) {
+      document.getElementById('nav-username').textContent = authData.user.username;
+      setSSEUserId(authData.user.id);
+    }
   } catch (_) {}
 
   try {
@@ -411,9 +498,20 @@ async function init() {
     document.getElementById('edit-name').value = data.name;
     document.getElementById('edit-desc').value = data.description || '';
 
+    // Read-only start/duration fields
+    const startStr = new Date(data.start_time).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    const durH = Math.floor(data.duration_minutes / 60);
+    const durM = data.duration_minutes % 60;
+    const durStr = durH && durM ? `${durH}h ${durM}m` : durH ? `${durH}h` : `${durM}m`;
+    document.getElementById('edit-start-time').value = startStr;
+    document.getElementById('edit-duration').value   = durStr;
+
     // Populate problem filter dropdown
     const sel = document.getElementById('filter-problem');
-    data.problems.forEach(p => {
+    contestProblems.forEach(p => {
       const opt = document.createElement('option');
       opt.value       = p.id;
       opt.textContent = `${p.label} — ${p.title}`;
@@ -423,9 +521,14 @@ async function init() {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('content').classList.remove('hidden');
 
-    // Load first two tabs immediately
+    // Load all tabs
     loadSubmissions();
     loadStats();
+    loadParticipants();
+    loadMProblems();
+
+    // SSE for real-time updates
+    initSSE(contestId);
   } catch (err) {
     document.getElementById('loading').textContent = 'Failed to load manager panel.';
     console.error(err);
@@ -440,6 +543,8 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`tab-${name}`).classList.add('active');
   if (btn) btn.classList.add('active');
+  if (name === 'participants') loadParticipants();
+  if (name === 'problems')     loadMProblems();
 }
 
 // ================================================================
@@ -701,6 +806,167 @@ async function submitAddProblem() {
     btn.textContent = 'Add Problem';
   }
 }
+
+// ================================================================
+// Tab 3: Participants
+// ================================================================
+async function loadParticipants() {
+  try {
+    const data = await apiFetch(`/contests/${contestId}/manager/participants`);
+    if (!data) return;
+    renderParticipants(data.participants);
+  } catch (err) {
+    document.getElementById('participants-tbody').innerHTML =
+      `<tr class="empty-row"><td colspan="6">${escHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderParticipants(list) {
+  const tbody = document.getElementById('participants-tbody');
+  if (!list.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No participants yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(p => {
+    const statusBadge = p.is_blocked
+      ? `<span class="badge badge-danger" style="background:#fed7d7;color:#c53030;">Blocked</span>`
+      : `<span class="badge badge-success" style="background:#c6f6d5;color:#22543d;">Active</span>`;
+    const blockBtn = p.is_blocked
+      ? `<button class="btn btn-sm"
+                 style="background:#c6f6d5;color:#22543d;font-size:0.75rem;"
+                 onclick="setBlock(${p.user_id}, false)">Unblock</button>`
+      : `<button class="btn btn-sm"
+                 style="background:#fed7d7;color:#c53030;font-size:0.75rem;"
+                 onclick="setBlock(${p.user_id}, true)">Block</button>`;
+    return `
+      <tr>
+        <td><a href="/profile.html?user=${encodeURIComponent(p.username)}">${escHtml(p.username)}</a></td>
+        <td style="color:var(--text-muted);">${escHtml(p.full_name || '')}</td>
+        <td style="text-align:center;">${p.solved}</td>
+        <td style="text-align:center;">${p.penalty}</td>
+        <td style="text-align:center;">${statusBadge}</td>
+        <td style="text-align:center;display:flex;gap:0.4rem;justify-content:center;">
+          ${blockBtn}
+          <button class="btn btn-sm"
+                  style="background:var(--border);color:var(--text);font-size:0.75rem;"
+                  onclick="kickParticipant(${p.user_id}, '${escHtml(p.username)}')">Remove</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function setBlock(userId, blocked) {
+  try {
+    await apiFetch(`/contests/${contestId}/manager/participants/${userId}/block`, {
+      method: 'PATCH',
+      body:   { blocked },
+    });
+    showToast(blocked ? 'Participant blocked' : 'Participant unblocked', 'success');
+    loadParticipants();
+  } catch (err) {
+    showToast(err.message || 'Action failed', 'error');
+  }
+}
+
+async function kickParticipant(userId, username) {
+  if (!confirm(`Remove ${username} from this contest?`)) return;
+  try {
+    await apiFetch(`/contests/${contestId}/manager/participants/${userId}`, { method: 'DELETE' });
+    showToast(`${username} removed`, 'success');
+    loadParticipants();
+  } catch (err) {
+    showToast(err.message || 'Failed to remove participant', 'error');
+  }
+}
+
+// ================================================================
+// Tab 4: Problems management
+// ================================================================
+let deleteProblemId   = null;
+let deleteProblemLabel = null;
+
+async function loadMProblems() {
+  try {
+    const data = await apiFetch(`/contests/${contestId}/problems`);
+    if (!data) return;
+    renderMProblems(data.problems);
+  } catch (err) {
+    document.getElementById('mproblems-tbody').innerHTML =
+      `<tr class="empty-row"><td colspan="5">${escHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderMProblems(problems) {
+  const tbody = document.getElementById('mproblems-tbody');
+  if (!problems.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No problems added yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = problems.map(p => `
+    <tr>
+      <td><strong>${escHtml(p.label)}</strong></td>
+      <td>
+        <a href="/problem.html?contestId=${contestId}&problemId=${p.id}"
+           target="_blank" style="color:var(--accent);">${escHtml(p.title)}</a>
+      </td>
+      <td style="color:var(--text-muted);">${p.type === 'external' ? 'External' : 'Custom'}</td>
+      <td style="color:var(--text-muted);">${escHtml(p.platform || '—')}</td>
+      <td>
+        <button class="btn btn-sm"
+                style="background:#fed7d7;color:#c53030;font-size:0.75rem;"
+                onclick="openDeleteProblem(${p.id}, '${escHtml(p.label)}', '${escHtml(p.title.replace(/'/g, "\\'"))}')">
+          Delete
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openDeleteProblem(problemId, label, title) {
+  deleteProblemId    = problemId;
+  deleteProblemLabel = label;
+  document.getElementById('delete-prob-label').textContent = label;
+  document.getElementById('delete-prob-title').textContent = title;
+  document.getElementById('delete-alert').classList.add('hidden');
+  document.getElementById('delete-confirm-btn').disabled    = false;
+  document.getElementById('delete-confirm-btn').textContent = 'Delete';
+  document.getElementById('delete-modal').classList.remove('hidden');
+}
+
+function closeDeleteModal(e) {
+  if (e.target === document.getElementById('delete-modal')) {
+    document.getElementById('delete-modal').classList.add('hidden');
+  }
+}
+
+async function confirmDeleteProblem() {
+  if (!deleteProblemId) return;
+  const btn     = document.getElementById('delete-confirm-btn');
+  const alertEl = document.getElementById('delete-alert');
+  btn.disabled    = true;
+  btn.textContent = 'Deleting…';
+  alertEl.classList.add('hidden');
+  try {
+    await apiFetch(`/contests/${contestId}/problems/${deleteProblemId}`, { method: 'DELETE' });
+    document.getElementById('delete-modal').classList.add('hidden');
+    showToast(`Problem ${deleteProblemLabel} deleted`, 'success');
+    loadMProblems();
+    loadStats();
+    loadSubmissions();
+  } catch (err) {
+    alertEl.className   = 'alert alert-error';
+    alertEl.textContent = err.message || 'Failed to delete problem.';
+    alertEl.classList.remove('hidden');
+    btn.disabled    = false;
+    btn.textContent = 'Delete';
+  }
+}
+
+// SSE events — refresh relevant tabs
+function onProblemAdded(_d)   { loadMProblems(); loadStats(); }
+function onProblemDeleted(_d) { loadMProblems(); loadStats(); loadSubmissions(); }
+function onContestUpdated(_d) { /* manager already knows */ }
 
 // ================================================================
 // Start

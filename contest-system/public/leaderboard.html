@@ -34,9 +34,42 @@
       vertical-align: super;
     }
 
+    /* ---- First blood ---- */
+    .lb-first-blood {
+      background: #fef9c3 !important;
+      color: #854d0e;
+    }
+    .first-blood-tag {
+      font-size: 0.7rem;
+      margin-left: 3px;
+      vertical-align: super;
+    }
+
     /* ---- Current user highlight ---- */
     .my-row td { background: #ebf8ff !important; }
     .my-row td:first-child { border-left: 3px solid var(--accent); }
+
+    /* ---- Legend ---- */
+    .lb-legend {
+      display: flex;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 0.75rem;
+      align-items: center;
+    }
+    .lb-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .legend-swatch {
+      width: 16px; height: 16px;
+      border-radius: 3px;
+      display: inline-block;
+      flex-shrink: 0;
+    }
 
     /* ---- Problem column headers ---- */
     th.prob-col {
@@ -150,18 +183,37 @@
         </div>
       </div>
 
+      <!-- Legend -->
+      <div class="lb-legend">
+        <div class="lb-legend-item">
+          <span class="legend-swatch" style="background:#c6f6d5;"></span> Accepted
+        </div>
+        <div class="lb-legend-item">
+          <span class="legend-swatch" style="background:#fef9c3;border:1px solid #fde047;"></span>
+          ⚡ First blood (fastest AC)
+        </div>
+        <div class="lb-legend-item" style="color:#e53e3e;">
+          ✗N — N wrong attempts (no AC)
+        </div>
+        <div class="lb-legend-item">
+          <span style="font-size:0.68rem;color:#e53e3e;font-weight:600;">+N</span>&nbsp;— WA penalty (N × 20min)
+        </div>
+      </div>
+
     </div><!-- /content -->
   </main>
 </div>
 
 <script src="/js/toast.js"></script>
 <script src="/js/api.js"></script>
+<script src="/js/sse.js"></script>
 <script>
 const params    = new URLSearchParams(location.search);
 const contestId = params.get('id');
 if (!contestId) { location.href = '/contests.html'; }
 
 let currentUsername = null;
+let currentUserId   = null;
 let refreshTimer    = null;
 let isRunning       = false;
 
@@ -174,7 +226,7 @@ async function doLogout() {
 // Render
 // ================================================================
 function renderLeaderboard(data) {
-  const { contest, problems, leaderboard } = data;
+  const { contest, problems, leaderboard, first_solvers = {} } = data;
 
   // Update last-refreshed timestamp
   document.getElementById('last-updated').textContent =
@@ -212,7 +264,7 @@ function renderLeaderboard(data) {
   }
 
   tbody.innerHTML = leaderboard.map(u => {
-    const isMe = u.username === currentUsername;
+    const isMe = currentUserId ? u.user_id === currentUserId : u.username === currentUsername;
 
     const probCells = problems.map(p => {
       const cell = u.problems[p.label];
@@ -220,15 +272,17 @@ function renderLeaderboard(data) {
         return `<td class="lb-empty">—</td>`;
       }
       if (cell.verdict === 'accepted') {
-        const penMin  = cell.ac_minutes + cell.wa_before * 20;
-        const waPart  = cell.wa_before
-          ? ` + ${cell.wa_before} WA (×20min)`
-          : '';
-        const tip     = `AC at ${cell.ac_minutes}min${waPart} = ${penMin}min penalty`;
-        const waTag   = cell.wa_before
+        const penMin    = cell.ac_minutes + cell.wa_before * 20;
+        const waPart    = cell.wa_before ? ` + ${cell.wa_before} WA (×20min)` : '';
+        const tip       = `AC at ${cell.ac_minutes}min${waPart} = ${penMin}min penalty`;
+        const waTag     = cell.wa_before
           ? `<span class="lb-wa-tag">+${cell.wa_before}</span>`
           : '';
-        return `<td class="lb-ac" title="${escHtml(tip)}">${cell.ac_minutes}${waTag}</td>`;
+        const solver    = first_solvers[p.id];
+        const isFirst   = solver && Number(solver.user_id) === Number(u.user_id);
+        const fbClass   = isFirst ? ' lb-first-blood' : '';
+        const fbTag     = isFirst ? `<span class="first-blood-tag">⚡</span>` : '';
+        return `<td class="lb-ac${fbClass}" title="${escHtml(tip)}">${cell.ac_minutes}${waTag}${fbTag}</td>`;
       }
       // wrong
       return `<td class="lb-wa">✗${cell.wa_count}</td>`;
@@ -320,14 +374,21 @@ async function load() {
   }
 }
 
+// SSE: live refresh when problems change
+function onProblemAdded(_d) { load(); }
+function onProblemDeleted(_d) { load(); }
+
 async function init() {
   try {
     const authData = await apiFetch('/auth/me');
     if (authData) {
       currentUsername = authData.user.username;
+      currentUserId   = authData.user.id;
       document.getElementById('nav-username').textContent = currentUsername;
+      setSSEUserId(authData.user.id);
     }
   } catch (_) {}
+  initSSE(contestId);
   await load();
 }
 

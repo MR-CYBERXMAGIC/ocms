@@ -439,6 +439,7 @@
 
 <script src="/js/toast.js"></script>
 <script src="/js/api.js"></script>
+<script src="/js/sse.js"></script>
 <script>
 // ================================================================
 // Bootstrap
@@ -493,8 +494,13 @@ async function init() {
   // Auth (non-fatal — problem page is viewable even if session expired for reading)
   try {
     const authData = await apiFetch('/auth/me');
-    if (authData) document.getElementById('nav-username').textContent = authData.user.username;
+    if (authData) {
+      document.getElementById('nav-username').textContent = authData.user.username;
+      setSSEUserId(authData.user.id);
+    }
   } catch (_) {}
+
+  initSSE(contestId);
 
   document.getElementById('back-link').href = `/contest.html?id=${contestId}`;
 

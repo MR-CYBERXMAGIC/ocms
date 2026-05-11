@@ -447,6 +447,7 @@ const updateContest = async (req, res) => {
       `UPDATE contests SET ${sets.join(', ')} WHERE id = $${idx}`,
       params
     );
+    global.broadcastToContest(Number(id), 'contest_updated', { message: 'Contest details have been updated.' });
     res.json({ message: 'Contest updated' });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Contest name already taken' });
@@ -464,10 +465,98 @@ const endContest = async (req, res) => {
       [id]
     );
     if (rowCount === 0) return res.status(409).json({ error: 'Contest is already ended' });
+    global.broadcastToContest(Number(id), 'contest_ended', { message: 'This contest has ended.' });
     res.json({ message: 'Contest ended successfully' });
   } catch (err) {
     console.error('endContest error:', err.message);
     res.status(500).json({ error: 'Failed to end contest' });
+  }
+};
+
+// GET /api/contests/:id/events  — SSE stream
+const sseHandler = (req, res) => {
+  const { id } = req.params;
+  const clientId = `${Date.now()}-${Math.random()}`;
+
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.flushHeaders();
+
+  res.write(`data: ${JSON.stringify({ connected: true })}\n\n`);
+
+  global.addSSEClient(Number(id), clientId, res);
+
+  req.on('close', () => {
+    global.removeSSEClient(Number(id), clientId);
+  });
+};
+
+// GET /api/contests/:id/manager/participants
+const getParticipants = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT cp.user_id, u.username, u.full_name, cp.joined_at, cp.is_blocked,
+              COALESCE(cs.solved,  0) AS solved,
+              COALESCE(cs.penalty, 0) AS penalty
+       FROM contest_participants cp
+       JOIN users u ON u.id = cp.user_id
+       LEFT JOIN contest_scores cs ON cs.contest_id = cp.contest_id AND cs.user_id = cp.user_id
+       WHERE cp.contest_id = $1
+       ORDER BY cp.joined_at ASC`,
+      [id]
+    );
+    res.json({ participants: rows });
+  } catch (err) {
+    console.error('getParticipants error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch participants' });
+  }
+};
+
+// PATCH /api/contests/:id/manager/participants/:userId/block
+const toggleBlockParticipant = async (req, res) => {
+  const { id, userId } = req.params;
+  const blocked = req.body.blocked === true || req.body.blocked === 'true';
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE contest_participants SET is_blocked = $1 WHERE contest_id = $2 AND user_id = $3`,
+      [blocked, id, userId]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'Participant not found' });
+    if (blocked) {
+      global.broadcastToContest(Number(id), 'you_are_blocked', {
+        userId:   Number(userId),
+        message:  'You have been blocked by the contest manager.',
+      });
+    }
+    res.json({ message: blocked ? 'Participant blocked' : 'Participant unblocked' });
+  } catch (err) {
+    console.error('toggleBlockParticipant error:', err.message);
+    res.status(500).json({ error: 'Failed to update participant' });
+  }
+};
+
+// DELETE /api/contests/:id/manager/participants/:userId
+const removeParticipant = async (req, res) => {
+  const { id, userId } = req.params;
+  try {
+    await pool.query(
+      `DELETE FROM contest_participants WHERE contest_id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+    await pool.query(
+      `DELETE FROM contest_scores WHERE contest_id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+    global.broadcastToContest(Number(id), 'you_are_blocked', {
+      userId:  Number(userId),
+      message: 'You have been removed from this contest.',
+    });
+    res.json({ message: 'Participant removed' });
+  } catch (err) {
+    console.error('removeParticipant error:', err.message);
+    res.status(500).json({ error: 'Failed to remove participant' });
   }
 };
 
@@ -476,4 +565,6 @@ module.exports = {
   requireManager,
   getManagerSubmissions, getManagerSubmission, getManagerStats,
   updateContest, endContest,
+  sseHandler,
+  getParticipants, toggleBlockParticipant, removeParticipant,
 };

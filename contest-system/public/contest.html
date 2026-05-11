@@ -227,6 +227,7 @@
 
 <script src="/js/toast.js"></script>
 <script src="/js/api.js"></script>
+<script src="/js/sse.js"></script>
 <script>
   const params     = new URLSearchParams(location.search);
   const contestId  = params.get('id');
@@ -442,8 +443,11 @@
         if (authData) {
           currentUsername = authData.user.username;
           document.getElementById('nav-username').textContent = currentUsername;
+          setSSEUserId(authData.user.id);
         }
       } catch (_) {}
+
+      initSSE(contestId);
 
       const data = await apiFetch(`/contests/${contestId}`);
       if (!data) return;
@@ -540,6 +544,11 @@
       console.error(err);
     }
   }
+
+  // SSE event handlers
+  function onProblemAdded(_d) { location.reload(); }
+  function onProblemDeleted(_d) { location.reload(); }
+  function onContestUpdated(_d) { location.reload(); }
 
   init();
 </script>
