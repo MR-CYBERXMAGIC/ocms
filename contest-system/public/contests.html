@@ -126,7 +126,7 @@
     <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
       <div>
         <h2>Contests</h2>
-        <p>Running and upcoming programming contests</p>
+        <p>All programming contests</p>
       </div>
       <a href="/create-contest.html" class="btn btn-primary">+ Create Contest</a>
     </div>
@@ -137,6 +137,7 @@
         <option value="all">All</option>
         <option value="running">Running</option>
         <option value="upcoming">Upcoming</option>
+        <option value="ended">Ended</option>
       </select>
       <button id="clear-btn" class="btn-clear" style="display:none;">✕ Clear</button>
     </div>
@@ -145,7 +146,7 @@
 
     <div id="empty" class="hidden" style="text-align:center;padding:4rem 1rem;">
       <div style="font-size:2rem;margin-bottom:0.75rem;">🏆</div>
-      <div style="color:var(--text-muted);font-size:0.95rem;">No running or upcoming contests right now.</div>
+      <div style="color:var(--text-muted);font-size:0.95rem;">No contests found.</div>
       <a href="/create-contest.html" class="btn btn-primary" style="margin-top:1.25rem;">Create a Contest</a>
     </div>
 
@@ -183,7 +184,7 @@
     let   visible = 0;
 
     cards.forEach(card => {
-      const nameMatch   = card.dataset.name.toLowerCase().includes(query);
+      const nameMatch   = card.dataset.name.includes(query);
       const statusMatch = status === 'all' || card.dataset.status === status;
       const show        = nameMatch && statusMatch;
       card.style.display = show ? '' : 'none';
@@ -210,19 +211,23 @@
 
       const grid = document.getElementById('contest-grid');
       grid.classList.remove('hidden');
+
+      function getStatusBadge(state) {
+        if (state === 'running')  return '<span class="badge badge-running">🟢 Running</span>';
+        if (state === 'upcoming') return '<span class="badge badge-upcoming">🔵 Upcoming</span>';
+        return '<span class="badge badge-ended">⚫ Ended</span>';
+      }
+
       grid.innerHTML = data.contests.map(c => {
-        const isRunning = c.status === 'running';
-        const lockIcon  = c.is_password_protected ? ' 🔒' : '';
+        const lockIcon = c.is_password_protected ? ' 🔒' : '';
         return `
           <a class="contest-card"
              href="/contest.html?id=${c.id}"
-             data-name="${escHtml(c.name)}"
-             data-status="${c.status}">
+             data-name="${escHtml(c.name).toLowerCase()}"
+             data-status="${c.contest_state}">
             <div class="contest-card-header">
               <div class="contest-card-title">${escHtml(c.name)}${lockIcon}</div>
-              <span class="badge ${isRunning ? 'badge-running' : 'badge-upcoming'}">
-                ${isRunning ? '🟢 Running' : '🔵 Upcoming'}
-              </span>
+              ${getStatusBadge(c.contest_state)}
             </div>
             <div class="contest-meta">
               <div>📅 ${escHtml(fmtDateTime(c.start_time))}</div>

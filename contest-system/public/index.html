@@ -334,16 +334,26 @@
         contestsBody.innerHTML =
           '<tr class="empty-row"><td colspan="4">No contests joined yet</td></tr>';
       } else {
-        contestsBody.innerHTML = p.contest_history.map(c => `
-          <tr>
-            <td>${escHtml(c.name)}</td>
-            <td>${new Date(c.start_time).toLocaleDateString()}</td>
-            <td>${c.is_ended
+        contestsBody.innerHTML = p.contest_history.map(c => {
+            const endMs       = new Date(c.start_time).getTime() + Number(c.duration_minutes) * 60000;
+            const startMs     = new Date(c.start_time).getTime();
+            const now         = Date.now();
+            const actualEnded = c.is_ended || now >= endMs;
+            const isRunning   = !actualEnded && now >= startMs;
+            const stateBadge  = actualEnded
               ? '<span class="badge badge-ended">Ended</span>'
-              : '<span class="badge badge-active">Active</span>'}</td>
-            <td>${c.rank !== null ? '#' + c.rank : '—'}</td>
-          </tr>
-        `).join('');
+              : isRunning
+                ? '<span class="badge badge-running">Running</span>'
+                : '<span class="badge badge-upcoming">Upcoming</span>';
+            return `
+              <tr style="cursor:pointer;" onclick="location.href='/contest.html?id=${c.id}'">
+                <td>${escHtml(c.name)}</td>
+                <td>${new Date(c.start_time).toLocaleDateString()}</td>
+                <td>${stateBadge}</td>
+                <td>${c.rank !== null ? '#' + c.rank : '—'}</td>
+              </tr>
+            `;
+          }).join('');
       }
 
       document.getElementById('loading').classList.add('hidden');

@@ -53,7 +53,9 @@ const getMe = async (req, res) => {
     );
 
     const { rows: contestHistory } = await pool.query(
-      `SELECT c.id, c.name, c.start_time, c.is_ended,
+      `SELECT c.id, c.name, c.start_time, c.duration_minutes, c.is_ended,
+              COALESCE(lv.solved,  0) AS solved,
+              COALESCE(lv.penalty, 0) AS penalty,
               (SELECT (COUNT(*) + 1)::INT
                FROM leaderboard_view lv2
                WHERE lv2.contest_id = c.id

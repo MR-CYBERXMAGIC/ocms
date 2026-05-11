@@ -319,6 +319,7 @@
   </main>
 </div>
 
+<script src="/js/addProblem.js"></script>
 <script src="/js/api.js"></script>
 <script>
   // ── State ──────────────────────────────────────────────────
@@ -389,11 +390,14 @@
   // ── External problem — async URL validation ────────────────
   async function addExternalProblem() {
     const source_url = document.getElementById('ext-url').value.trim();
+    const platform   = document.getElementById('ext-platform').value;
     const errEl      = document.getElementById('ext-err');
     const btn        = document.querySelector('#tab-external button.btn-primary');
     errEl.classList.add('hidden');
 
-    if (!source_url) return showError(errEl, 'Please enter a problem URL.');
+    // Client-side validation (same as manager.html)
+    const urlError = validateProblemURL(platform, source_url);
+    if (urlError) return showError(errEl, urlError);
 
     // Local duplicate check
     if (pendingProblems.some(p => p.source_url === source_url)) {

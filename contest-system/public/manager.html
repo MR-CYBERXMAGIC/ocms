@@ -147,6 +147,7 @@
         <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
           <h2 id="contest-name" style="margin:0;font-size:1.25rem;"></h2>
           <span class="badge badge-pending">Manager</span>
+          <span id="contest-status-badge"></span>
           <div style="margin-left:auto;display:flex;gap:0.5rem;">
             <a id="contest-link" href="#"
                class="btn btn-sm" style="background:var(--border);color:var(--text);">View Contest</a>
@@ -154,6 +155,19 @@
                     class="btn btn-primary btn-sm">+ Add Problem</button>
           </div>
         </div>
+      </div>
+
+      <!-- State banners -->
+      <div id="contest-upcoming-banner"
+           style="display:none;background:#dbeafe;border:1px solid #3b82f6;
+                  padding:0.75rem 1rem;border-radius:8px;margin-bottom:1rem;
+                  color:#1e40af;font-size:0.875rem;font-weight:600;">
+      </div>
+      <div id="contest-ended-banner"
+           style="display:none;background:#fee2e2;border:1px solid #ef4444;
+                  padding:0.75rem 1rem;border-radius:8px;margin-bottom:1rem;
+                  color:#991b1b;font-size:0.875rem;font-weight:600;">
+        ⚫ This contest has ended. Some actions are disabled.
       </div>
 
       <!-- Tabs -->
@@ -284,14 +298,14 @@
             <form id="edit-form" onsubmit="saveEdit(event)">
               <div class="form-row">
                 <div class="form-group">
-                  <label>Start Time <span style="font-size:0.75rem;color:var(--text-muted);">(read-only)</span></label>
-                  <input type="text" id="edit-start-time" class="form-control" disabled
-                         style="background:var(--sidebar-bg);color:var(--text-muted);">
+                  <label>Start Time</label>
+                  <input type="datetime-local" id="edit-start-time" class="form-control">
+                  <small id="start-time-hint" style="color:var(--text-muted);font-size:0.78rem;"></small>
                 </div>
                 <div class="form-group">
-                  <label>Duration <span style="font-size:0.75rem;color:var(--text-muted);">(read-only)</span></label>
-                  <input type="text" id="edit-duration" class="form-control" disabled
-                         style="background:var(--sidebar-bg);color:var(--text-muted);">
+                  <label>Duration (minutes)</label>
+                  <input type="number" id="edit-duration" class="form-control" min="1" max="1440">
+                  <small id="duration-hint" style="color:var(--text-muted);font-size:0.78rem;"></small>
                 </div>
               </div>
               <div class="form-group">
@@ -406,18 +420,23 @@
     <!-- External fields -->
     <div id="external-fields" class="hidden">
       <div class="form-group">
-        <label>Problem Title</label>
-        <input type="text" id="p-ext-title" class="form-control" placeholder="e.g. Two Sum">
-      </div>
-      <div class="form-group">
         <label>Platform <span style="color:var(--red);">*</span></label>
-        <input type="text" id="p-platform" class="form-control"
-               placeholder="e.g. Codeforces, AtCoder">
+        <select id="p-platform" class="form-control">
+          <option value="">Select platform…</option>
+          <option value="CSES">CSES</option>
+          <option value="CodeChef">CodeChef</option>
+          <option value="HackerRank">HackerRank</option>
+          <option value="USACO">USACO</option>
+        </select>
       </div>
       <div class="form-group">
         <label>Source URL <span style="color:var(--red);">*</span></label>
         <input type="url" id="p-source-url" class="form-control"
-               placeholder="https://codeforces.com/problemset/problem/…">
+               placeholder="https://cses.fi/problemset/task/1068">
+      </div>
+      <div class="form-group">
+        <label>Title <span style="font-weight:400;color:var(--text-muted);font-size:0.78rem;">(optional — auto-detected from URL)</span></label>
+        <input type="text" id="p-ext-title" class="form-control" placeholder="Leave blank to auto-detect">
       </div>
     </div>
 
@@ -452,6 +471,7 @@
 </div>
 
 <script src="/js/toast.js"></script>
+<script src="/js/addProblem.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/sse.js"></script>
 <script>
@@ -494,20 +514,43 @@ async function init() {
     document.getElementById('contest-name').textContent  = data.name;
     document.getElementById('contest-link').href = `/contest.html?id=${contestId}`;
 
+    // Status badge
+    const state = data.contest_state;
+    const statusBadges = {
+      upcoming: '<span class="badge badge-upcoming">🔵 Upcoming</span>',
+      running:  '<span class="badge badge-running">🟢 Running</span>',
+      ended:    '<span class="badge badge-ended">⚫ Ended</span>',
+    };
+    document.getElementById('contest-status-badge').innerHTML = statusBadges[state] || '';
+
+    // State banners
+    if (state === 'upcoming') {
+      const banner = document.getElementById('contest-upcoming-banner');
+      banner.textContent   = `⏳ Contest starts at ${new Date(data.start_time).toLocaleString()}`;
+      banner.style.display = 'block';
+    } else if (state === 'ended') {
+      document.getElementById('contest-ended-banner').style.display = 'block';
+    }
+
     // Pre-fill edit form
     document.getElementById('edit-name').value = data.name;
     document.getElementById('edit-desc').value = data.description || '';
 
-    // Read-only start/duration fields
-    const startStr = new Date(data.start_time).toLocaleString(undefined, {
-      month: 'short', day: 'numeric', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-    const durH = Math.floor(data.duration_minutes / 60);
-    const durM = data.duration_minutes % 60;
-    const durStr = durH && durM ? `${durH}h ${durM}m` : durH ? `${durH}h` : `${durM}m`;
-    document.getElementById('edit-start-time').value = startStr;
-    document.getElementById('edit-duration').value   = durStr;
+    // Start time and duration — editable only if upcoming
+    const isUpcoming = data.contest_state === 'upcoming';
+
+    const startInput    = document.getElementById('edit-start-time');
+    startInput.value    = new Date(data.start_time).toISOString().slice(0, 16);
+    startInput.disabled = !isUpcoming;
+
+    const durInput    = document.getElementById('edit-duration');
+    durInput.value    = data.duration_minutes;
+    durInput.disabled = !isUpcoming;
+
+    const editableHint = 'Can be changed while contest has not started.';
+    const lockedHint   = 'Cannot change after contest has started.';
+    document.getElementById('start-time-hint').textContent = isUpcoming ? editableHint : lockedHint;
+    document.getElementById('duration-hint').textContent   = isUpcoming ? editableHint : lockedHint;
 
     // Populate problem filter dropdown
     const sel = document.getElementById('filter-problem');
@@ -677,11 +720,21 @@ async function saveEdit(e) {
   btn.disabled    = true;
   btn.textContent = 'Saving…';
 
+  const startInput = document.getElementById('edit-start-time');
+  const durInput   = document.getElementById('edit-duration');
+
   const body = {
     name:        document.getElementById('edit-name').value,
     description: document.getElementById('edit-desc').value,
     password:    document.getElementById('edit-password').value,
   };
+
+  if (!startInput.disabled && startInput.value) {
+    body.start_time = new Date(startInput.value).toISOString();
+  }
+  if (!durInput.disabled && durInput.value) {
+    body.duration_minutes = parseInt(durInput.value);
+  }
 
   try {
     await apiFetch(`/contests/${contestId}`, { method: 'PATCH', body });
@@ -769,14 +822,18 @@ async function submitAddProblem() {
         hints:            document.getElementById('p-hints').value.trim()         || undefined,
       };
     } else {
-      const platform   = document.getElementById('p-platform').value.trim();
+      const platform   = document.getElementById('p-platform').value;
       const source_url = document.getElementById('p-source-url').value.trim();
-      if (!platform || !source_url) throw new Error('Platform and Source URL are required');
+
+      // Client-side validation before hitting the server
+      const urlError = validateProblemURL(platform, source_url);
+      if (urlError) throw new Error(urlError);
+
       body = {
         type:       'external',
         platform,
         source_url,
-        title:      document.getElementById('p-ext-title').value.trim() || source_url,
+        title:      document.getElementById('p-ext-title').value.trim() || undefined,
       };
     }
 

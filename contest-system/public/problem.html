@@ -6,6 +6,9 @@
   <title>Problem — Contest System</title>
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
   <style>
     /* ---- Full-height two-panel layout ---- */
     .main {
@@ -181,8 +184,9 @@
       font-family: 'SF Mono', Consolas, 'Courier New', monospace;
       line-height: 1.5;
     }
-    .CodeMirror-gutters { z-index: 4 !important; }
-    .CodeMirror-scroll  { padding-left: 2px; }
+    .CodeMirror-gutters { z-index: 4 !important; background: #282c34; border-right: 1px solid #3a3f4b; }
+    .CodeMirror-linenumber { padding: 0 8px 0 4px; min-width: 28px; color: #6b7280; }
+    .CodeMirror-lines { padding-left: 4px; }
 
     .hint-detail {
       margin-bottom: 0.5rem;
@@ -540,6 +544,7 @@ async function init() {
 
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('content').classList.remove('hidden');
+    editor.refresh(); // CodeMirror was init'd inside display:none — recalculate gutter width
 
     // Load submissions and start polling if any are pending
     await loadSubmissions();
@@ -674,6 +679,19 @@ function renderProblemBody(p) {
   }
 
   body.innerHTML = html;
+
+  // Render LaTeX in problem body (KaTeX auto-render)
+  if (typeof renderMathInElement === 'function') {
+    renderMathInElement(body, {
+      delimiters: [
+        { left: '$$', right: '$$', display: true },
+        { left: '$',  right: '$',  display: false },
+        { left: '\\(', right: '\\)', display: false },
+        { left: '\\[', right: '\\]', display: true },
+      ],
+      throwOnError: false,
+    });
+  }
 }
 
 function probSection(title, content, extraClass = '') {
@@ -691,10 +709,6 @@ function probSectionInner(title, content) {
 function onLangChange() {
   const lang = document.getElementById('lang-select').value;
   editor.setOption('mode', CM_MODES[lang] || 'text/plain');
-  // Only inject starter if editor is empty — never clear existing code
-  if (!editor.getValue().trim()) {
-    editor.setValue(STARTERS[lang] || '');
-  }
   editor.focus();
 }
 

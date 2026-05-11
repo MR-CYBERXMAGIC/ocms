@@ -10,21 +10,31 @@ const listContests = async (req, res) => {
       SELECT
         c.id,
         c.name,
-        CASE WHEN c.start_time <= NOW() THEN 'running' ELSE 'upcoming' END AS status,
         c.start_time,
         c.duration_minutes,
-        (c.password_hash IS NOT NULL)       AS is_password_protected,
+        c.is_ended,
+        c.description,
+        (c.password_hash IS NOT NULL AND c.password_hash != '') AS is_password_protected,
+        COUNT(DISTINCT cpb.problem_id)::INT AS problem_count,
         COUNT(DISTINCT cp.user_id)::INT     AS participant_count,
-        COUNT(DISTINCT cpb.problem_id)::INT AS problem_count
+        CASE
+          WHEN c.is_ended = TRUE                                                              THEN 'ended'
+          WHEN NOW() < c.start_time                                                          THEN 'upcoming'
+          WHEN NOW() < c.start_time + (c.duration_minutes * INTERVAL '1 minute')            THEN 'running'
+          ELSE 'ended'
+        END AS contest_state
       FROM contests c
-      LEFT JOIN contest_participants cp  ON cp.contest_id  = c.id
-      LEFT JOIN contest_problems    cpb ON cpb.contest_id = c.id
-      WHERE c.is_ended = FALSE
-        AND (c.start_time + (c.duration_minutes || ' minutes')::interval) > NOW()
-      GROUP BY c.id, c.name, c.start_time, c.duration_minutes, c.password_hash
+      LEFT JOIN contest_problems     cpb   ON cpb.contest_id = c.id
+      LEFT JOIN contest_participants cp    ON cp.contest_id  = c.id
+      GROUP BY c.id
       ORDER BY
-        CASE WHEN c.start_time <= NOW() THEN 0 ELSE 1 END ASC,
-        c.start_time ASC
+        CASE
+          WHEN c.is_ended = TRUE                                                                  THEN 2
+          WHEN NOW() >= c.start_time
+           AND NOW() < c.start_time + (c.duration_minutes * INTERVAL '1 minute')                THEN 0
+          ELSE 1
+        END ASC,
+        c.start_time DESC
     `);
     res.json({ contests: rows });
   } catch (err) {
@@ -79,8 +89,8 @@ function getContestState(contest) {
   if (contest.is_ended) return 'ended';
   const now   = new Date();
   const start = new Date(contest.start_time);
-  const end   = new Date(start.getTime() + contest.duration_minutes * 60000);
-  if (now < start)              return 'upcoming';
+  const end   = new Date(start.getTime() + Number(contest.duration_minutes) * 60 * 1000);
+  if (now < start)               return 'upcoming';
   if (now >= start && now < end) return 'running';
   return 'ended';
 }
@@ -133,6 +143,7 @@ const getContest = async (req, res) => {
       problem_count:         Number(contest.problem_count),
       contest_state,
       is_joined,
+      is_participant:        is_joined,
       is_manager,
     };
 
@@ -422,18 +433,59 @@ const getManagerStats = async (req, res) => {
   }
 };
 
-// PATCH /api/contests/:id  — update name, description, password only
+// PATCH /api/contests/:id  — update name, description, password, and (if upcoming) start_time/duration
 const updateContest = async (req, res) => {
   const { id } = req.params;
-  const { name, description, password } = req.body;
+  const { name, description, password, start_time, duration_minutes } = req.body;
 
   try {
+    // Fetch current contest to check state
+    const { rows: contestRows } = await pool.query(
+      `SELECT start_time, duration_minutes, is_ended FROM contests WHERE id = $1`, [id]
+    );
+    if (!contestRows.length) return res.status(404).json({ error: 'Contest not found' });
+
+    const contest    = contestRows[0];
+    const now        = new Date();
+    const isUpcoming = !contest.is_ended && now < new Date(contest.start_time);
+
     const sets   = [];
     const params = [];
     let   idx    = 1;
 
-    if (name        !== undefined) { sets.push(`name        = $${idx++}`); params.push(name.trim()); }
-    if (description !== undefined) { sets.push(`description = $${idx++}`); params.push(description || null); }
+    if (name !== undefined) {
+      sets.push(`name = $${idx++}`);
+      params.push(name.trim());
+    }
+    if (description !== undefined) {
+      sets.push(`description = $${idx++}`);
+      params.push(description || null);
+    }
+
+    if (start_time !== undefined) {
+      if (!isUpcoming) {
+        return res.status(400).json({ error: 'Start time cannot be changed after contest has started.' });
+      }
+      const newStart = new Date(start_time);
+      if (isNaN(newStart.getTime()) || newStart <= new Date()) {
+        return res.status(400).json({ error: 'Start time must be in the future.' });
+      }
+      sets.push(`start_time = $${idx++}`);
+      params.push(newStart.toISOString());
+    }
+
+    if (duration_minutes !== undefined) {
+      if (!isUpcoming) {
+        return res.status(400).json({ error: 'Duration cannot be changed after contest has started.' });
+      }
+      const dur = parseInt(duration_minutes);
+      if (isNaN(dur) || dur < 1 || dur > 1440) {
+        return res.status(400).json({ error: 'Duration must be between 1 and 1440 minutes.' });
+      }
+      sets.push(`duration_minutes = $${idx++}`);
+      params.push(dur);
+    }
+
     if (password && password.trim()) {
       const hash = await bcrypt.hash(password.trim(), SALT_ROUNDS);
       sets.push(`password_hash = $${idx++}`);

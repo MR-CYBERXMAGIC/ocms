@@ -457,19 +457,17 @@
       document.getElementById('contest-name').textContent = contest.name;
 
       timerStart = new Date(contest.start_time).getTime();
-      timerEnd   = timerStart + contest.duration_minutes * 60 * 1000;
+      timerEnd   = timerStart + Number(contest.duration_minutes) * 60 * 1000;
 
-      // Status badge + ended banner
-      const badgeEl  = document.getElementById('contest-badge');
-      const now      = Date.now();
-      const isEnded  = contest.is_ended || now >= timerEnd;
-      const isLive   = !isEnded && now >= timerStart;
+      // Status badge + ended banner — always trust server's contest_state
+      const state   = contest.contest_state;
+      const badgeEl = document.getElementById('contest-badge');
 
-      if (isEnded) {
+      if (state === 'ended') {
         badgeEl.textContent = 'Ended';
         badgeEl.className   = 'badge badge-ended';
         document.getElementById('ended-banner').classList.remove('hidden');
-      } else if (isLive) {
+      } else if (state === 'running') {
         badgeEl.textContent = 'Running';
         badgeEl.className   = 'badge badge-running';
       } else {
@@ -524,7 +522,7 @@
           renderScorePanel(contest.user_rank, contest.user_score.solved, contest.user_score.penalty);
         }
 
-        if (contest.is_joined && !isEnded) {
+        if (contest.is_joined && state !== 'ended') {
           refreshScoreFromLeaderboard();
           scoreRefreshTimer = setInterval(() => {
             if (Date.now() >= timerEnd) {

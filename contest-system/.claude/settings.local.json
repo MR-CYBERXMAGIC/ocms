@@ -14,7 +14,11 @@
       "Bash(npm install *)",
       "Bash(node -e ' *)",
       "PowerShell(Get-Process *)",
-      "PowerShell($env:PGPASSWORD = \"9475\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -d contest_db -f \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Desktop\\\\ocms\\\\contest-system\\\\db\\\\phase9_migration.sql\" 2>&1)"
+      "PowerShell($env:PGPASSWORD = \"9475\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -d contest_db -f \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Desktop\\\\ocms\\\\contest-system\\\\db\\\\phase9_migration.sql\" 2>&1)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); console.log\\('KEY:', process.env.ONECOMPILER_API_KEY ? 'SET ✓ → ' + process.env.ONECOMPILER_API_KEY.slice\\(0,8\\) + '...' : 'MISSING ✗'\\)\")",
+      "Bash(node --check services/judge.js)",
+      "Bash(node --check controllers/profileController.js)",
+      "PowerShell(Get-NetTCPConnection *)"
     ]
   }
 }

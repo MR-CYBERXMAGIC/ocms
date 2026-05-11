@@ -602,6 +602,35 @@ code          { font-family: 'SF Mono', Consolas, monospace; font-size: 0.85em; 
 .form-row .form-group { flex: 1; }
 
 /* ============================================================
+   CodeMirror editor structural fixes
+   ============================================================ */
+
+/* Gutter must sit above the code layer */
+.CodeMirror-gutters {
+  z-index: 4;
+  border-right: 1px solid var(--border);
+}
+
+/* Line number text */
+.CodeMirror-linenumber {
+  padding: 0 8px 0 4px;
+  min-width: 28px;
+  text-align: right;
+}
+
+/* Small gap between gutter border and first char — CodeMirror sets sizer
+   margin-left automatically; this is just breathing room on top of that */
+.CodeMirror-lines {
+  padding-left: 4px;
+}
+
+/* Allow horizontal scroll; vertical handled by CodeMirror internally */
+.CodeMirror-scroll {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+}
+
+/* ============================================================
    Responsive
    ============================================================ */
 @media (max-width: 768px) {
