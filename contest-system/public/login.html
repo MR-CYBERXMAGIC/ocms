@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — Contest System</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="auth-page">
+  <div class="auth-container">
+    <div class="auth-card">
+      <h1 class="auth-title">Contest System</h1>
+      <p class="auth-subtitle">Sign in to your account</p>
+
+      <div id="error-msg" class="alert alert-error hidden"></div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label for="identifier">Username or Email</label>
+          <input class="form-control" type="text" id="identifier" name="identifier"
+                 placeholder="Enter username or email" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input class="form-control" type="password" id="password" name="password"
+                 placeholder="Enter password" required autocomplete="current-password">
+        </div>
+        <button type="submit" id="submit-btn" class="btn btn-primary btn-full">
+          Sign In
+        </button>
+      </form>
+
+      <p class="auth-footer">No account? <a href="/register.html">Register here</a></p>
+    </div>
+  </div>
+
+  <script>
+    // Skip login page if session already active
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => { if (r.ok) window.location.replace('/'); })
+      .catch(() => {});
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById('error-msg');
+      const btn   = document.getElementById('submit-btn');
+
+      errEl.classList.add('hidden');
+      btn.disabled    = true;
+      btn.textContent = 'Signing in…';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method:      'POST',
+          credentials: 'include',
+          headers:     { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: document.getElementById('identifier').value.trim(),
+            password:   document.getElementById('password').value,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          errEl.textContent = data.error || 'Login failed. Please try again.';
+          errEl.classList.remove('hidden');
+        } else {
+          window.location.replace('/');
+        }
+      } catch {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled    = false;
+        btn.textContent = 'Sign In';
+      }
+    });
+  </script>
+</body>
+</html>

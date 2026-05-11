@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Contest System</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Contest System</h1>
+      <p>Programming Contests</p>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a href="/"             class="active">🏠&nbsp; Home</a></li>
+      <li><a href="/contests.html"            >🏆&nbsp; Contests</a></li>
+      <li><a href="/users.html"               >👥&nbsp; Users</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <strong id="nav-username">—</strong>
+        Logged in
+      </div>
+      <button onclick="doLogout()" class="btn btn-danger btn-sm btn-full">Logout</button>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+    <div id="loading" class="spinner">Loading dashboard…</div>
+
+    <div id="content" class="hidden">
+
+      <div class="page-header">
+        <h2>My Dashboard</h2>
+        <p id="page-subtitle">Your performance at a glance</p>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-label">Problems Solved</span>
+          <span class="stat-value" id="st-solved">—</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Problems Attempted</span>
+          <span class="stat-value" id="st-attempted">—</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Acceptance Rate</span>
+          <span class="stat-value" id="st-rate">—</span>
+          <span class="stat-sub">of attempted problems</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Current Streak</span>
+          <span class="stat-value" id="st-streak">—</span>
+          <span class="stat-sub" id="st-longest">Longest: —</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Contests Created</span>
+          <span class="stat-value" id="st-created">—</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Contests Joined</span>
+          <span class="stat-value" id="st-joined">—</span>
+        </div>
+      </div>
+
+      <!-- Recent Submissions -->
+      <div class="card">
+        <div class="card-header">
+          <h3>Recent Submissions</h3>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Problem</th>
+                <th>Contest</th>
+                <th>Language</th>
+                <th>Verdict</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="subs-body">
+              <tr class="empty-row"><td colspan="5">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Contest History -->
+      <div class="card">
+        <div class="card-header">
+          <h3>Contest History</h3>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Contest</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Rank</th>
+              </tr>
+            </thead>
+            <tbody id="contests-body">
+              <tr class="empty-row"><td colspan="4">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- #content -->
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  async function doLogout() {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    window.location.href = '/login.html';
+  }
+
+  async function init() {
+    try {
+      // Auth gate — apiFetch redirects to /login.html on 401
+      const authData = await apiFetch('/auth/me');
+      if (!authData) return;
+
+      document.getElementById('nav-username').textContent = authData.user.username;
+
+      const p = await apiFetch('/profile/me');
+      if (!p) return;
+
+      // Stats
+      document.getElementById('page-subtitle').textContent =
+        `Welcome back, ${escHtml(p.full_name)}`;
+      document.getElementById('st-solved').textContent    = p.problems_solved ?? 0;
+      document.getElementById('st-attempted').textContent = p.problems_attempted ?? 0;
+      document.getElementById('st-rate').textContent      = (p.acceptance_rate ?? 0) + '%';
+      document.getElementById('st-streak').textContent    = '🔥 ' + (p.current_streak ?? 0) + ' days';
+      document.getElementById('st-longest').textContent   = 'Longest: ' + (p.longest_streak ?? 0) + ' days';
+      document.getElementById('st-created').textContent   = p.contests_created ?? 0;
+      document.getElementById('st-joined').textContent    = p.contests_participated ?? 0;
+
+      // Recent submissions table
+      const subsBody = document.getElementById('subs-body');
+      if (!p.recent_submissions?.length) {
+        subsBody.innerHTML =
+          '<tr class="empty-row"><td colspan="5">No submissions yet</td></tr>';
+      } else {
+        subsBody.innerHTML = p.recent_submissions.map(s => `
+          <tr>
+            <td>${escHtml(s.problem_title)}</td>
+            <td>${s.contest_name
+              ? escHtml(s.contest_name)
+              : '<span class="text-muted">Practice</span>'}</td>
+            <td><code>${escHtml(s.language)}</code></td>
+            <td>${verdictBadge(s.verdict)}</td>
+            <td title="${escHtml(s.submitted_at)}">${timeAgo(s.submitted_at)}</td>
+          </tr>
+        `).join('');
+      }
+
+      // Contest history table
+      const contestsBody = document.getElementById('contests-body');
+      if (!p.contest_history?.length) {
+        contestsBody.innerHTML =
+          '<tr class="empty-row"><td colspan="4">No contests joined yet</td></tr>';
+      } else {
+        contestsBody.innerHTML = p.contest_history.map(c => `
+          <tr>
+            <td>${escHtml(c.name)}</td>
+            <td>${new Date(c.start_time).toLocaleDateString()}</td>
+            <td>${c.is_ended
+              ? '<span class="badge badge-ended">Ended</span>'
+              : '<span class="badge badge-active">Active</span>'}</td>
+            <td>${c.rank !== null ? '#' + c.rank : '—'}</td>
+          </tr>
+        `).join('');
+      }
+
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('content').classList.remove('hidden');
+    } catch (err) {
+      document.getElementById('loading').textContent = 'Failed to load dashboard.';
+      console.error(err);
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>

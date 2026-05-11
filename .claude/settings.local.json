@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(node -e ' *)",
+      "Bash(timeout 5 node -e ' *)",
+      "Bash(node -e \"require\\('dotenv'\\).config\\(\\); require\\('express'\\); require\\('pg'\\); require\\('bcrypt'\\); require\\('cors'\\); require\\('express-session'\\); console.log\\('ALL DEPS OK'\\);\")",
+      "PowerShell(New-Item *)",
+      "Bash(node --check server.js)",
+      "Bash(node --check controllers/authController.js)",
+      "Bash(node --check controllers/userController.js)",
+      "Bash(node --check controllers/profileController.js)",
+      "Bash(node --check middleware/auth.js)",
+      "Bash(claude install-skill *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Desktop\\\\ocms\" -Recurse -Force)",
+      "Bash(Select-Object -Property FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)",
+      "Bash(node --check controllers/leaderboardController.js)",
+      "Bash(node --check controllers/contestController.js)",
+      "Bash(node --check routes/leaderboard.js)",
+      "Bash(node --check routes/contests.js)",
+      "Bash(node -e \"require\\('./controllers/leaderboardController'\\); require\\('./controllers/contestController'\\); require\\('./routes/contests'\\); console.log\\('all modules OK'\\)\")",
+      "Bash(node --check \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Desktop\\\\ocms\\\\contest-system\\\\controllers\\\\userController.js\")",
+      "Bash(node --check \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Desktop\\\\ocms\\\\contest-system\\\\controllers\\\\profileController.js\")",
+      "Bash(node --check \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Desktop\\\\ocms\\\\contest-system\\\\controllers\\\\leaderboardController.js\")"
+    ]
+  }
+}

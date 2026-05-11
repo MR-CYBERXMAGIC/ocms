@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaderboard — Contest System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* ---- Per-problem cells ---- */
+    .lb-ac {
+      background: #c6f6d5;
+      color: #22543d;
+      text-align: center;
+      font-weight: 700;
+      font-size: 0.875rem;
+      cursor: default;
+    }
+    .lb-wa {
+      color: #e53e3e;
+      text-align: center;
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+    .lb-empty {
+      color: #cbd5e0;
+      text-align: center;
+      font-size: 0.875rem;
+    }
+    .lb-wa-tag {
+      font-size: 0.68rem;
+      color: #e53e3e;
+      margin-left: 3px;
+      font-weight: 600;
+      vertical-align: super;
+    }
+
+    /* ---- Current user highlight ---- */
+    .my-row td { background: #ebf8ff !important; }
+    .my-row td:first-child { border-left: 3px solid var(--accent); }
+
+    /* ---- Problem column headers ---- */
+    th.prob-col {
+      text-align: center;
+      font-size: 0.82rem;
+      min-width: 68px;
+    }
+
+    /* ---- Status bar ---- */
+    .lb-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+    .live-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.35; }
+    }
+
+    /* ---- Rank cell ---- */
+    .rank-cell {
+      font-weight: 700;
+      color: var(--text-muted);
+      text-align: center;
+      font-size: 0.875rem;
+    }
+    .rank-cell.top3 { color: var(--accent); }
+
+    .solved-cell {
+      font-weight: 700;
+      text-align: center;
+    }
+    .penalty-cell {
+      text-align: center;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Contest System</h1>
+      <p>Programming Contests</p>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a href="/">🏠&nbsp; Home</a></li>
+      <li><a href="/contests.html" class="active">🏆&nbsp; Contests</a></li>
+      <li><a href="/users.html">👥&nbsp; Users</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <strong id="nav-username">—</strong>
+        Logged in
+      </div>
+      <button onclick="doLogout()" class="btn btn-danger btn-sm btn-full">Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div id="loading" class="spinner">Loading leaderboard…</div>
+    <div id="content" class="hidden">
+
+      <!-- Header -->
+      <div class="page-header" style="margin-bottom:0.75rem;">
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <a id="back-link" href="#" style="font-size:0.875rem;color:var(--text-muted);">← Contest</a>
+          <h2 id="contest-name" style="margin:0;"></h2>
+          <span id="status-badge" class="badge"></span>
+        </div>
+      </div>
+
+      <!-- Meta bar: last updated + live indicator -->
+      <div class="lb-meta">
+        <span id="live-indicator" class="hidden">
+          <span class="live-dot"></span> Live — refreshes every 30s
+        </span>
+        <span id="last-updated"></span>
+        <span style="margin-left:auto;">
+          <a id="back-btn" href="#"
+             style="font-size:0.8rem;padding:0.3rem 0.75rem;border:1px solid var(--border);border-radius:5px;color:var(--text);">
+            Back to Contest
+          </a>
+        </span>
+      </div>
+
+      <!-- Participant count -->
+      <div id="lb-count" style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.6rem;"></div>
+
+      <!-- Table card -->
+      <div class="card">
+        <div class="table-wrap">
+          <table class="data-table" style="min-width:100%;">
+            <thead id="lb-head"></thead>
+            <tbody id="lb-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+const params    = new URLSearchParams(location.search);
+const contestId = params.get('id');
+if (!contestId) { location.href = '/contests.html'; }
+
+let currentUsername = null;
+let refreshTimer    = null;
+let isRunning       = false;
+
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  window.location.href = '/login.html';
+}
+
+// ================================================================
+// Render
+// ================================================================
+function renderLeaderboard(data) {
+  const { contest, problems, leaderboard } = data;
+
+  // Update last-refreshed timestamp
+  document.getElementById('last-updated').textContent =
+    'Updated ' + new Date().toLocaleTimeString();
+
+  // Participant count
+  const n = leaderboard.length;
+  document.getElementById('lb-count').textContent =
+    n === 0 ? 'No participants yet'
+    : n === 1 ? '1 participant'
+    : `${n} participants`;
+
+  // Table header
+  const thead = document.getElementById('lb-head');
+  thead.innerHTML = `
+    <tr>
+      <th style="width:52px;text-align:center;">Rank</th>
+      <th>Username</th>
+      <th style="width:70px;text-align:center;">Solved</th>
+      <th style="width:80px;text-align:center;">Penalty</th>
+      ${problems.map(p =>
+        `<th class="prob-col" title="${escHtml(p.title)}">${escHtml(p.label)}</th>`
+      ).join('')}
+    </tr>
+  `;
+
+  // Table body
+  const tbody  = document.getElementById('lb-body');
+  const colCount = 4 + problems.length;
+
+  if (!leaderboard.length) {
+    tbody.innerHTML =
+      `<tr class="empty-row"><td colspan="${colCount}">No participants yet</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = leaderboard.map(u => {
+    const isMe = u.username === currentUsername;
+
+    const probCells = problems.map(p => {
+      const cell = u.problems[p.label];
+      if (!cell || cell.verdict === 'unattempted') {
+        return `<td class="lb-empty">—</td>`;
+      }
+      if (cell.verdict === 'accepted') {
+        const penMin  = cell.ac_minutes + cell.wa_before * 20;
+        const waPart  = cell.wa_before
+          ? ` + ${cell.wa_before} WA (×20min)`
+          : '';
+        const tip     = `AC at ${cell.ac_minutes}min${waPart} = ${penMin}min penalty`;
+        const waTag   = cell.wa_before
+          ? `<span class="lb-wa-tag">+${cell.wa_before}</span>`
+          : '';
+        return `<td class="lb-ac" title="${escHtml(tip)}">${cell.ac_minutes}${waTag}</td>`;
+      }
+      // wrong
+      return `<td class="lb-wa">✗${cell.wa_count}</td>`;
+    }).join('');
+
+    const rankCls = u.rank <= 3 ? 'rank-cell top3' : 'rank-cell';
+    const rowCls  = isMe ? 'my-row' : '';
+
+    return `
+      <tr class="${rowCls}">
+        <td class="${rankCls}">${u.rank}</td>
+        <td>
+          <a href="/profile.html?user=${encodeURIComponent(u.username)}"
+             style="font-weight:${isMe ? '700' : '400'};">
+            ${escHtml(u.username)}${isMe ? ' (you)' : ''}
+          </a>
+        </td>
+        <td class="solved-cell">${u.solved}</td>
+        <td class="penalty-cell">${u.penalty}</td>
+        ${probCells}
+      </tr>
+    `;
+  }).join('');
+}
+
+// ================================================================
+// Init & auto-refresh
+// ================================================================
+async function load() {
+  try {
+    const data = await apiFetch(`/contests/${contestId}/leaderboard`);
+    if (!data) return;
+
+    const { contest } = data;
+    const now    = Date.now();
+    const endMs  = new Date(contest.start_time).getTime() + contest.duration_minutes * 60000;
+    isRunning    = !contest.is_ended && now < endMs;
+
+    document.title           = `Leaderboard — ${contest.name}`;
+    document.getElementById('contest-name').textContent = contest.name;
+
+    document.getElementById('back-link').href = `/contest.html?id=${contestId}`;
+    document.getElementById('back-btn').href  = `/contest.html?id=${contestId}`;
+
+    const badge = document.getElementById('status-badge');
+    if (contest.is_ended || now >= endMs) {
+      badge.textContent = 'Ended';
+      badge.className   = 'badge badge-ended';
+    } else if (now >= new Date(contest.start_time).getTime()) {
+      badge.textContent = 'Running';
+      badge.className   = 'badge badge-running';
+    } else {
+      badge.textContent = 'Upcoming';
+      badge.className   = 'badge badge-upcoming';
+    }
+
+    if (isRunning) {
+      document.getElementById('live-indicator').classList.remove('hidden');
+    }
+
+    renderLeaderboard(data);
+
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('content').classList.remove('hidden');
+
+    // Auto-refresh every 30 s while running
+    if (isRunning && !refreshTimer) {
+      refreshTimer = setInterval(async () => {
+        try {
+          const fresh = await apiFetch(`/contests/${contestId}/leaderboard`);
+          if (!fresh) return;
+          renderLeaderboard(fresh);
+          // Stop if contest ended
+          const freshEnd = new Date(fresh.contest.start_time).getTime()
+            + fresh.contest.duration_minutes * 60000;
+          if (fresh.contest.is_ended || Date.now() >= freshEnd) {
+            clearInterval(refreshTimer);
+            refreshTimer = null;
+            document.getElementById('live-indicator').classList.add('hidden');
+            document.getElementById('status-badge').textContent = 'Ended';
+            document.getElementById('status-badge').className   = 'badge badge-ended';
+          }
+        } catch (_) {}
+      }, 30000);
+    }
+  } catch (err) {
+    document.getElementById('loading').textContent = 'Failed to load leaderboard.';
+    console.error(err);
+  }
+}
+
+async function init() {
+  try {
+    const authData = await apiFetch('/auth/me');
+    if (authData) {
+      currentUsername = authData.user.username;
+      document.getElementById('nav-username').textContent = currentUsername;
+    }
+  } catch (_) {}
+  await load();
+}
+
+init();
+</script>
+</body>
+</html>

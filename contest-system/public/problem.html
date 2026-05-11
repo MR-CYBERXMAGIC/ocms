@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Problem — Contest System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <style>
+    /* ---- Full-height two-panel layout ---- */
+    .main {
+      padding: 1.25rem 1.5rem 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      height: 100vh !important;
+      overflow: hidden !important;
+    }
+
+    #content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .problem-topbar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .problem-panels {
+      flex: 1;
+      display: flex;
+      gap: 1.25rem;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ---- Left: problem statement ---- */
+    .panel-left {
+      flex: 1 1 50%;
+      overflow-y: auto;
+      padding-right: 1rem;
+      border-right: 1px solid var(--border);
+      min-width: 0;
+    }
+
+    .problem-statement { line-height: 1.8; font-size: 0.9rem; white-space: pre-wrap; word-break: break-word; }
+
+    .prob-section { margin-bottom: 1.5rem; }
+    .prob-section h4 {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    .prob-section .content { font-size: 0.875rem; white-space: pre-wrap; word-break: break-word; line-height: 1.7; }
+
+    .limits-row {
+      display: flex;
+      gap: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 1.25rem;
+    }
+    .limits-row strong { color: var(--text); }
+
+    .test-case-block {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .tc-pane {
+      background: #f7fafc;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem;
+    }
+    .tc-pane label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 0.4rem;
+    }
+    .tc-pane pre {
+      margin: 0;
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 0.82rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text);
+    }
+
+    .hints-toggle {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.875rem;
+      color: var(--accent);
+      background: none;
+      border: none;
+      padding: 0;
+      font-weight: 600;
+    }
+
+    .external-notice {
+      background: #ebf4ff;
+      border: 1px solid #bee3f8;
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+      color: #2a4365;
+    }
+
+    .ext-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.75rem 1.1rem;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 600;
+      margin-top: 0.5rem;
+      transition: border-color 0.15s;
+    }
+    .ext-link:hover { border-color: var(--accent); text-decoration: none; }
+
+    /* ---- Right: editor + controls ---- */
+    .panel-right {
+      flex: 1 1 50%;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .editor-controls {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.6rem;
+    }
+    .lang-select {
+      padding: 0.35rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.875rem;
+      background: var(--card-bg);
+      color: var(--text);
+      outline: none;
+      cursor: pointer;
+    }
+    .lang-select:focus { border-color: var(--accent); }
+
+    .editor-wrap {
+      flex-shrink: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .CodeMirror {
+      height: 300px;
+      font-size: 0.85rem;
+      font-family: 'SF Mono', Consolas, 'Courier New', monospace;
+      line-height: 1.5;
+    }
+
+    .action-row {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.6rem;
+    }
+    .btn-run    { background: #2d3748; color: #fff; }
+    .btn-run:hover:not(:disabled) { background: #1a202c; }
+    .btn-submit { background: var(--green); color: #fff; }
+    .btn-submit:hover:not(:disabled) { background: #276749; }
+
+    #submit-status { font-size: 0.8rem; color: var(--text-muted); }
+
+    /* ---- Run output ---- */
+    .run-output-section {
+      flex-shrink: 0;
+      margin-top: 0.75rem;
+    }
+    .run-output-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+    .run-output-inner {
+      background: #f7fafc;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 0.82rem;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+
+    .tc-result {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .tc-result:last-child { margin-bottom: 0; }
+    .tc-result.pass .icon { color: var(--green); font-weight: 700; }
+    .tc-result.fail .icon { color: var(--red);   font-weight: 700; }
+    .tc-result.err  .icon { color: var(--orange); font-weight: 700; }
+    .tc-result .icon { flex-shrink: 0; }
+
+    /* ---- Submissions panel ---- */
+    .subs-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      margin-top: 0.75rem;
+      overflow: hidden;
+    }
+    .subs-header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.4rem;
+    }
+    .subs-header-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+    .poll-dot {
+      font-size: 0.72rem;
+      color: var(--green);
+    }
+    .subs-scroll {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    /* ---- Spinner ---- */
+    .spin {
+      display: inline-block;
+      width: 13px; height: 13px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: _spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    @keyframes _spin { to { transform: rotate(360deg); } }
+
+    /* ---- Problem label circle (topbar) ---- */
+    .label-circle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.875rem;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Contest System</h1>
+      <p>Programming Contests</p>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a href="/">🏠&nbsp; Home</a></li>
+      <li><a href="/contests.html" class="active">🏆&nbsp; Contests</a></li>
+      <li><a href="/users.html">👥&nbsp; Users</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <strong id="nav-username">—</strong>
+        Logged in
+      </div>
+      <button onclick="doLogout()" class="btn btn-danger btn-sm btn-full">Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div id="loading" class="spinner">Loading problem…</div>
+
+    <div id="content" class="hidden">
+
+      <!-- Top bar: back link + problem identity -->
+      <div class="problem-topbar">
+        <a id="back-link" href="#" style="font-size:0.875rem;color:var(--text-muted);flex-shrink:0;">← Back</a>
+        <span class="label-circle" id="problem-label"></span>
+        <strong id="problem-title" style="font-size:1rem;"></strong>
+        <span id="type-badge" class="badge"></span>
+      </div>
+
+      <!-- Two panels -->
+      <div class="problem-panels">
+
+        <!-- ====== LEFT: Problem statement ====== -->
+        <div class="panel-left" id="problem-body"></div>
+
+        <!-- ====== RIGHT: Editor + submissions ====== -->
+        <div class="panel-right">
+
+          <!-- Language selector -->
+          <div class="editor-controls">
+            <label for="lang-select" style="font-size:0.8rem;font-weight:600;flex-shrink:0;">Language</label>
+            <select id="lang-select" class="lang-select" onchange="onLangChange()">
+              <option value="C++17">C++17</option>
+              <option value="Python 3">Python 3</option>
+              <option value="Java">Java</option>
+              <option value="C">C</option>
+            </select>
+          </div>
+
+          <!-- Code editor -->
+          <div class="editor-wrap">
+            <textarea id="code-editor"></textarea>
+          </div>
+
+          <!-- Run / Submit buttons -->
+          <div class="action-row">
+            <button id="btn-run"    class="btn btn-run    btn-sm" onclick="doRun()">▶ Run</button>
+            <button id="btn-submit" class="btn btn-submit btn-sm" onclick="doSubmit()">Submit</button>
+            <span   id="submit-status"></span>
+          </div>
+
+          <!-- Run output (hidden until first Run) -->
+          <div class="run-output-section hidden" id="run-output-section">
+            <div class="run-output-label">Run Output</div>
+            <div class="run-output-inner" id="run-output-inner"></div>
+          </div>
+
+          <!-- My Submissions -->
+          <div class="subs-panel">
+            <div class="subs-header">
+              <span class="subs-header-label">My Submissions</span>
+              <span class="poll-dot hidden" id="poll-dot">● live</span>
+            </div>
+            <div class="subs-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Language</th>
+                    <th>Verdict</th>
+                    <th>Exec&nbsp;(ms)</th>
+                  </tr>
+                </thead>
+                <tbody id="subs-tbody">
+                  <tr class="empty-row"><td colspan="4">No submissions yet</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div><!-- /panel-right -->
+      </div><!-- /problem-panels -->
+    </div><!-- /content -->
+  </main>
+</div>
+
+<!-- CodeMirror -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+
+<script src="/js/api.js"></script>
+<script>
+// ================================================================
+// Bootstrap
+// ================================================================
+const params    = new URLSearchParams(location.search);
+const contestId = params.get('contestId');
+const problemId = params.get('problemId');
+if (!contestId || !problemId) { location.href = '/contests.html'; }
+
+const CM_MODES = {
+  'C++17':    'text/x-c++src',
+  'Python 3': 'text/x-python',
+  'Java':     'text/x-java',
+  'C':        'text/x-csrc',
+};
+
+const STARTERS = {
+  'C++17':    '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}\n',
+  'Python 3': '# Write your solution here\n',
+  'Java':     'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        \n    }\n}\n',
+  'C':        '#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}\n',
+};
+
+let editor;
+let sampleTestCases = [];
+let isCustom        = false;
+
+let verdictPollTimer  = null;   // setTimeout handle — polls status after submit
+let tablePollTimer    = null;   // setInterval handle — refreshes submissions table
+
+// ================================================================
+// Init
+// ================================================================
+async function init() {
+  editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
+    mode:           CM_MODES['C++17'],
+    lineNumbers:    true,
+    indentUnit:     4,
+    tabSize:        4,
+    indentWithTabs: false,
+    autofocus:      false,
+  });
+  editor.setValue(STARTERS['C++17']);
+
+  // Auth (non-fatal — problem page is viewable even if session expired for reading)
+  try {
+    const authData = await apiFetch('/auth/me');
+    if (authData) document.getElementById('nav-username').textContent = authData.user.username;
+  } catch (_) {}
+
+  document.getElementById('back-link').href = `/contest.html?id=${contestId}`;
+
+  try {
+    const data = await apiFetch(`/contests/${contestId}/problems/${problemId}`);
+    if (!data) return;
+
+    const p = data.problem;
+    document.title = `${p.label}. ${p.title} — Contest System`;
+    document.getElementById('problem-label').textContent = p.label;
+    document.getElementById('problem-title').textContent = p.title;
+
+    isCustom = (p.type === 'custom');
+    const typeBadge = document.getElementById('type-badge');
+    if (isCustom) {
+      typeBadge.textContent = 'Custom';
+      typeBadge.className   = 'badge badge-progress';
+    } else {
+      typeBadge.textContent = p.platform || 'External';
+      typeBadge.className   = 'badge badge-pending';
+      // Disable Run for external problems
+      const btnRun = document.getElementById('btn-run');
+      btnRun.disabled = true;
+      btnRun.title    = 'Run is unavailable for external problems';
+    }
+
+    sampleTestCases = (isCustom && p.sample_test_cases) ? p.sample_test_cases : [];
+    renderProblemBody(p);
+
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('content').classList.remove('hidden');
+
+    // Load submissions and start polling if any are pending
+    await loadSubmissions();
+  } catch (err) {
+    document.getElementById('loading').textContent = 'Failed to load problem.';
+    console.error(err);
+  }
+}
+
+// ================================================================
+// Problem statement rendering
+// ================================================================
+function renderProblemBody(p) {
+  const body = document.getElementById('problem-body');
+
+  if (!isCustom) {
+    body.innerHTML = `
+      <div class="external-notice">
+        This problem is hosted on <strong>${escHtml(p.platform || 'an external platform')}</strong>.
+        Read the statement on the platform, then submit your code below.
+        Verdict will remain <em>Pending</em> — judging is done manually on the platform.
+      </div>
+      <a href="${escHtml(p.source_url || '#')}" target="_blank" rel="noopener" class="ext-link">
+        🔗&nbsp; ${escHtml(p.title)}
+        <span style="font-size:0.75rem;color:var(--text-muted);margin-left:auto;">${escHtml(p.source_url || '')}</span>
+      </a>
+    `;
+    return;
+  }
+
+  let html = '';
+
+  html += `
+    <div class="limits-row">
+      <span>⏱ Time: <strong>${p.time_limit_ms} ms</strong></span>
+      <span>💾 Memory: <strong>${p.memory_limit_mb} MB</strong></span>
+    </div>
+  `;
+
+  html += probSection('Problem Statement', p.statement, 'problem-statement');
+
+  if (p.input_format || p.output_format) {
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">`;
+    if (p.input_format)  html += probSectionInner('Input Format',  p.input_format);
+    if (p.output_format) html += probSectionInner('Output Format', p.output_format);
+    html += `</div>`;
+  }
+
+  if (p.constraints_text) html += probSection('Constraints', p.constraints_text);
+
+  // Sample test cases
+  if (p.sample_test_cases && p.sample_test_cases.length) {
+    html += `<div class="prob-section"><h4>Sample Test Cases</h4>`;
+    p.sample_test_cases.forEach((tc, i) => {
+      html += `
+        <div style="font-size:0.72rem;font-weight:600;color:var(--text-muted);margin-bottom:0.25rem;">Example ${i + 1}</div>
+        <div class="test-case-block">
+          <div class="tc-pane"><label>Input</label><pre>${escHtml(tc.input)}</pre></div>
+          <div class="tc-pane"><label>Expected Output</label><pre>${escHtml(tc.expected_output)}</pre></div>
+        </div>
+      `;
+    });
+    html += `</div>`;
+  } else {
+    html += `<div class="prob-section"><h4>Sample Test Cases</h4>
+      <p style="font-size:0.875rem;color:var(--text-muted);">No sample test cases provided.</p></div>`;
+  }
+
+  // Hints (collapsed by default)
+  if (p.hints) {
+    html += `
+      <div class="prob-section">
+        <button class="hints-toggle" id="hints-toggle" onclick="toggleHints()">💡 Show Hints ▾</button>
+        <div id="hints-body" class="hidden" style="margin-top:0.6rem;font-size:0.875rem;white-space:pre-wrap;line-height:1.7;">
+          ${escHtml(p.hints)}
+        </div>
+      </div>
+    `;
+  }
+
+  body.innerHTML = html;
+}
+
+function probSection(title, content, extraClass = '') {
+  return `<div class="prob-section"><h4>${escHtml(title)}</h4>
+    <div class="content ${extraClass}">${escHtml(content)}</div></div>`;
+}
+function probSectionInner(title, content) {
+  return `<div class="prob-section" style="margin-bottom:0;">
+    <h4>${escHtml(title)}</h4><div class="content">${escHtml(content)}</div></div>`;
+}
+
+function toggleHints() {
+  const body = document.getElementById('hints-body');
+  const btn  = document.getElementById('hints-toggle');
+  const hidden = body.classList.toggle('hidden');
+  btn.textContent = hidden ? '💡 Show Hints ▾' : '💡 Hide Hints ▴';
+}
+
+// ================================================================
+// Language switch
+// ================================================================
+function onLangChange() {
+  const lang = document.getElementById('lang-select').value;
+  editor.setOption('mode', CM_MODES[lang] || 'text/plain');
+  if (!editor.getValue().trim()) {
+    editor.setValue(STARTERS[lang] || '');
+  }
+}
+
+// ================================================================
+// Run button — runs against sample test cases via /api/run
+// ================================================================
+async function doRun() {
+  if (!isCustom) return;
+
+  const btnRun  = document.getElementById('btn-run');
+  const section = document.getElementById('run-output-section');
+  const inner   = document.getElementById('run-output-inner');
+  const lang    = document.getElementById('lang-select').value;
+  const code    = editor.getValue();
+
+  btnRun.disabled    = true;
+  btnRun.textContent = '⏳ Running…';
+  section.classList.remove('hidden');
+  inner.innerHTML = '<span style="color:var(--text-muted)">Running…</span>';
+
+  if (!sampleTestCases.length) {
+    inner.innerHTML = '<span style="color:var(--text-muted)">No sample test cases to run against.</span>';
+    btnRun.disabled    = false;
+    btnRun.textContent = '▶ Run';
+    return;
+  }
+
+  const parts = [];
+  for (let i = 0; i < sampleTestCases.length; i++) {
+    const tc = sampleTestCases[i];
+    try {
+      const resp = await fetch('/api/run', {
+        method:      'POST',
+        credentials: 'include',
+        headers:     { 'Content-Type': 'application/json' },
+        body:        JSON.stringify({ language: lang, code, stdin: tc.input }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        parts.push(`<div class="tc-result err"><span class="icon">⚠</span><span>Test ${i+1}: ${escHtml(data.error || 'Error')}</span></div>`);
+        continue;
+      }
+
+      const stdout = (data.stdout || '').trim();
+      const stderr = (data.stderr || '').trim();
+      const ms     = data.executionTime || 0;
+      const expOut = tc.expected_output.trim();
+
+      if (stderr) {
+        parts.push(`<div class="tc-result err"><span class="icon">✗</span><span>Test ${i+1}: Runtime Error — <code style="font-size:0.78rem;">${escHtml(stderr.slice(0, 120))}</code></span></div>`);
+      } else if (stdout === expOut) {
+        parts.push(`<div class="tc-result pass"><span class="icon">✓</span><span>Test ${i+1}: Passed (${ms} ms)</span></div>`);
+      } else {
+        parts.push(`<div class="tc-result fail"><span class="icon">✗</span><span>Test ${i+1}: Wrong Answer — Expected: <code>${escHtml(expOut)}</code>, Got: <code>${escHtml(stdout || '(empty)')}</code></span></div>`);
+      }
+    } catch (err) {
+      parts.push(`<div class="tc-result err"><span class="icon">⚠</span><span>Test ${i+1}: Network error</span></div>`);
+    }
+  }
+
+  inner.innerHTML    = parts.join('');
+  btnRun.disabled    = false;
+  btnRun.textContent = '▶ Run';
+}
+
+// ================================================================
+// Submit button
+// ================================================================
+async function doSubmit() {
+  const btnSubmit = document.getElementById('btn-submit');
+  const statusEl  = document.getElementById('submit-status');
+  const lang      = document.getElementById('lang-select').value;
+  const code      = editor.getValue();
+
+  if (!code.trim()) { statusEl.textContent = 'Write some code first!'; return; }
+
+  btnSubmit.disabled   = true;
+  btnSubmit.innerHTML  = '<span class="spin"></span>Judging…';
+  statusEl.textContent = '';
+
+  try {
+    const resp = await apiFetch(
+      `/contests/${contestId}/problems/${problemId}/submit`,
+      { method: 'POST', body: { language: lang, code } }
+    );
+    if (!resp) return;
+
+    const submissionId = resp.submission_id;
+
+    // Immediately refresh table (shows Pending row)
+    await loadSubmissions();
+
+    // Poll verdict every 2 s and re-enable button when resolved
+    pollVerdict(submissionId, btnSubmit, statusEl);
+  } catch (err) {
+    btnSubmit.disabled   = false;
+    btnSubmit.innerHTML  = 'Submit';
+    statusEl.textContent = err.message || 'Submission failed';
+  }
+}
+
+function pollVerdict(submissionId, btnSubmit, statusEl) {
+  clearTimeout(verdictPollTimer);
+  verdictPollTimer = setTimeout(async () => {
+    try {
+      const resp = await fetch(`/api/submissions/${submissionId}/status`, { credentials: 'include' });
+      if (!resp.ok) throw new Error('poll failed');
+      const { verdict } = await resp.json();
+
+      if (verdict === 'Pending' || verdict === 'In Progress') {
+        pollVerdict(submissionId, btnSubmit, statusEl);
+      } else {
+        btnSubmit.disabled  = false;
+        btnSubmit.innerHTML = 'Submit';
+        await loadSubmissions();
+      }
+    } catch (_) {
+      // Give up polling gracefully
+      btnSubmit.disabled  = false;
+      btnSubmit.innerHTML = 'Submit';
+    }
+  }, 2000);
+}
+
+// ================================================================
+// Submissions table
+// ================================================================
+async function loadSubmissions() {
+  try {
+    const data = await apiFetch(`/contests/${contestId}/problems/${problemId}/submissions`);
+    if (!data) return null;
+    renderSubmissions(data.submissions);
+    manageTablePoller(data.submissions);
+    return data;
+  } catch (_) {
+    return null;
+  }
+}
+
+function renderSubmissions(subs) {
+  const tbody = document.getElementById('subs-tbody');
+  if (!subs || !subs.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No submissions yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = subs.map(s => `
+    <tr>
+      <td style="color:var(--text-muted);font-size:0.8rem;">${escHtml(timeAgo(s.submitted_at))}</td>
+      <td>${escHtml(s.language)}</td>
+      <td>${verdictBadge(s.verdict)}</td>
+      <td>${s.execution_time_ms != null ? s.execution_time_ms : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function hasPending(subs) {
+  return subs && subs.some(s => s.verdict === 'Pending' || s.verdict === 'In Progress');
+}
+
+function manageTablePoller(subs) {
+  const dot = document.getElementById('poll-dot');
+  if (hasPending(subs)) {
+    dot.classList.remove('hidden');
+    if (!tablePollTimer) {
+      tablePollTimer = setInterval(async () => {
+        try {
+          const data = await apiFetch(`/contests/${contestId}/problems/${problemId}/submissions`);
+          if (!data) return;
+          renderSubmissions(data.submissions);
+          if (!hasPending(data.submissions)) {
+            clearInterval(tablePollTimer);
+            tablePollTimer = null;
+            dot.classList.add('hidden');
+          }
+        } catch (_) {}
+      }, 3000);
+    }
+  } else {
+    dot.classList.add('hidden');
+    if (tablePollTimer) {
+      clearInterval(tablePollTimer);
+      tablePollTimer = null;
+    }
+  }
+}
+
+// ================================================================
+// Auth helpers
+// ================================================================
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  window.location.href = '/login.html';
+}
+
+// ================================================================
+// Start
+// ================================================================
+init();
+</script>
+</body>
+</html>

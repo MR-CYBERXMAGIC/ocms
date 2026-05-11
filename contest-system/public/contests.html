@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contests — Contest System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .contest-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.25rem;
+    }
+    .contest-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      cursor: pointer;
+      transition: box-shadow 0.15s, border-color 0.15s;
+      text-decoration: none;
+      display: block;
+      color: inherit;
+    }
+    .contest-card:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      border-color: var(--accent);
+      text-decoration: none;
+    }
+    .contest-card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .contest-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .contest-meta {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .contest-meta-row {
+      display: flex;
+      gap: 1.25rem;
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Contest System</h1>
+      <p>Programming Contests</p>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a href="/">🏠&nbsp; Home</a></li>
+      <li><a href="/contests.html" class="active">🏆&nbsp; Contests</a></li>
+      <li><a href="/users.html">👥&nbsp; Users</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <strong id="nav-username">—</strong>
+        Logged in
+      </div>
+      <button onclick="doLogout()" class="btn btn-danger btn-sm btn-full">Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+      <div>
+        <h2>Contests</h2>
+        <p>Running and upcoming programming contests</p>
+      </div>
+      <a href="/create-contest.html" class="btn btn-primary">+ Create Contest</a>
+    </div>
+
+    <div id="loading" class="spinner">Loading contests…</div>
+
+    <div id="empty" class="hidden" style="text-align:center;padding:4rem 1rem;">
+      <div style="font-size:2rem;margin-bottom:0.75rem;">🏆</div>
+      <div style="color:var(--text-muted);font-size:0.95rem;">No running or upcoming contests right now.</div>
+      <a href="/create-contest.html" class="btn btn-primary" style="margin-top:1.25rem;">Create a Contest</a>
+    </div>
+
+    <div id="contest-grid" class="contest-grid hidden"></div>
+  </main>
+
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  async function doLogout() {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    window.location.href = '/login.html';
+  }
+
+  function fmtDateTime(iso) {
+    return new Date(iso).toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  }
+
+  function fmtDuration(mins) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h === 0) return `${m}m`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+  }
+
+  async function init() {
+    try {
+      const authData = await apiFetch('/auth/me');
+      if (!authData) return;
+      document.getElementById('nav-username').textContent = authData.user.username;
+
+      const data = await apiFetch('/contests');
+      document.getElementById('loading').classList.add('hidden');
+
+      if (!data.contests.length) {
+        document.getElementById('empty').classList.remove('hidden');
+        return;
+      }
+
+      const grid = document.getElementById('contest-grid');
+      grid.classList.remove('hidden');
+      grid.innerHTML = data.contests.map(c => {
+        const isRunning = c.status === 'Running';
+        return `
+          <a class="contest-card" href="/contest.html?id=${c.id}">
+            <div class="contest-card-header">
+              <div class="contest-card-title">${escHtml(c.name)}</div>
+              <span class="badge ${isRunning ? 'badge-running' : 'badge-upcoming'}">
+                ${isRunning ? '● Running' : '◎ Upcoming'}
+              </span>
+            </div>
+            <div class="contest-meta">
+              <div>📅 ${escHtml(fmtDateTime(c.start_time))}</div>
+              <div>⏱ ${escHtml(fmtDuration(c.duration_minutes))}</div>
+              <div class="contest-meta-row" style="margin-top:0.2rem;">
+                <span>📋 ${c.problem_count} problem${c.problem_count !== 1 ? 's' : ''}</span>
+                <span>👥 ${c.participant_count} participant${c.participant_count !== 1 ? 's' : ''}</span>
+              </div>
+            </div>
+          </a>
+        `;
+      }).join('');
+    } catch (err) {
+      document.getElementById('loading').textContent = 'Failed to load contests.';
+      console.error(err);
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>

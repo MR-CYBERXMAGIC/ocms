@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Users — Contest System</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Contest System</h1>
+      <p>Programming Contests</p>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a href="/"             >🏠&nbsp; Home</a></li>
+      <li><a href="/contests.html">🏆&nbsp; Contests</a></li>
+      <li><a href="/users.html"   class="active">👥&nbsp; Users</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <strong id="nav-username">—</strong>
+        Logged in
+      </div>
+      <button onclick="doLogout()" class="btn btn-danger btn-sm btn-full">Logout</button>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+    <div class="page-header">
+      <h2>Users</h2>
+      <p>All registered participants, sorted by problems solved</p>
+    </div>
+
+    <div class="search-bar">
+      <input class="search-input" type="text" id="search"
+             placeholder="Search by name or username…" autocomplete="off">
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Username</th>
+              <th>Solved</th>
+              <th>Attempted</th>
+              <th>Acc. Rate</th>
+              <th>Last Seen</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="users-body">
+            <tr class="empty-row"><td colspan="7">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  let debounceTimer;
+
+  async function doLogout() {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    window.location.href = '/login.html';
+  }
+
+  async function loadUsers(search = '') {
+    const body = document.getElementById('users-body');
+    body.innerHTML = '<tr class="empty-row"><td colspan="7">Loading…</td></tr>';
+    try {
+      const qs   = search ? '?search=' + encodeURIComponent(search) : '';
+      const data = await apiFetch('/users' + qs);
+      if (!data) return;
+
+      if (!data.users.length) {
+        body.innerHTML = '<tr class="empty-row"><td colspan="7">No users found</td></tr>';
+        return;
+      }
+
+      body.innerHTML = data.users.map(u => `
+        <tr>
+          <td>${escHtml(u.full_name)}</td>
+          <td>
+            <a href="/profile.html?username=${encodeURIComponent(u.username)}">
+              ${escHtml(u.username)}
+            </a>
+          </td>
+          <td>${u.problems_solved}</td>
+          <td>${u.problems_attempted}</td>
+          <td>${u.acceptance_rate !== null ? u.acceptance_rate + '%' : '—'}</td>
+          <td title="${escHtml(u.last_seen)}">${timeAgo(u.last_seen)}</td>
+          <td>${statusBadge(u.is_online)}</td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      body.innerHTML =
+        '<tr class="empty-row"><td colspan="7">Failed to load users</td></tr>';
+      console.error(err);
+    }
+  }
+
+  document.getElementById('search').addEventListener('input', (e) => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => loadUsers(e.target.value.trim()), 300);
+  });
+
+  async function init() {
+    const authData = await apiFetch('/auth/me');
+    if (!authData) return;
+    document.getElementById('nav-username').textContent = authData.user.username;
+    loadUsers();
+  }
+
+  init();
+</script>
+</body>
+</html>

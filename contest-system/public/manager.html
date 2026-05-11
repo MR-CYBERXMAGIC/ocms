@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manager Panel — Contest System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* ---- Filter bar ---- */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .filter-select {
+      padding: 0.4rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.875rem;
+      background: var(--card-bg);
+      color: var(--text);
+      outline: none;
+    }
+    .filter-select:focus { border-color: var(--accent); }
+
+    /* ---- Solve rate bar ---- */
+    .rate-bar {
+      display: inline-block;
+      width: 80px;
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      vertical-align: middle;
+      overflow: hidden;
+      margin-right: 4px;
+    }
+    .rate-fill { height: 100%; background: var(--green); border-radius: 4px; }
+
+    /* ---- Modals ---- */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 900;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1rem;
+    }
+    .modal-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.75rem 2rem;
+      width: 100%; max-width: 700px;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+    }
+    .modal-box h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1.25rem; }
+    .modal-close {
+      position: absolute; top: 1rem; right: 1rem;
+      background: none; border: none;
+      font-size: 1.25rem; cursor: pointer;
+      color: var(--text-muted);
+      line-height: 1;
+      padding: 0.25rem;
+    }
+    .modal-close:hover { color: var(--text); }
+
+    /* ---- Code display ---- */
+    .code-block {
+      background: #1a202c;
+      color: #e2e8f0;
+      font-family: 'SF Mono', Consolas, 'Courier New', monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre;
+      max-height: 55vh;
+      overflow-y: auto;
+    }
+
+    /* ---- Add problem type toggle ---- */
+    .type-toggle {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 1.1rem;
+    }
+    .type-btn {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      background: none;
+      border: none;
+      font-size: 0.875rem;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: background 0.12s, color 0.12s;
+    }
+    .type-btn.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+    /* ---- Danger zone ---- */
+    .danger-zone {
+      border: 1px solid #fc8181;
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-top: 2rem;
+      background: #fff5f5;
+    }
+    .danger-zone h4 { color: var(--red); font-size: 0.875rem; margin-bottom: 0.4rem; }
+    .danger-zone p  { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.875rem; }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Contest System</h1>
+      <p>Programming Contests</p>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a href="/">🏠&nbsp; Home</a></li>
+      <li><a href="/contests.html" class="active">🏆&nbsp; Contests</a></li>
+      <li><a href="/users.html">👥&nbsp; Users</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <strong id="nav-username">—</strong>
+        Logged in
+      </div>
+      <button onclick="doLogout()" class="btn btn-danger btn-sm btn-full">Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div id="loading" class="spinner">Loading manager panel…</div>
+    <div id="content" class="hidden">
+
+      <!-- Page header -->
+      <div class="page-header" style="margin-bottom:1.25rem;">
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <h2 id="contest-name" style="margin:0;font-size:1.25rem;"></h2>
+          <span class="badge badge-pending">Manager</span>
+          <div style="margin-left:auto;display:flex;gap:0.5rem;">
+            <a id="contest-link" href="#"
+               class="btn btn-sm" style="background:var(--border);color:var(--text);">View Contest</a>
+            <button onclick="openAddProblem()"
+                    class="btn btn-primary btn-sm">+ Add Problem</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('submissions', this)">All Submissions</button>
+        <button class="tab-btn"        onclick="switchTab('stats',       this)">Problem Stats</button>
+        <button class="tab-btn"        onclick="switchTab('edit',        this)">Edit Contest</button>
+      </div>
+
+      <!-- ===== Tab 1: All Submissions ===== -->
+      <div id="tab-submissions" class="tab-pane active">
+        <div class="filter-bar">
+          <select id="filter-problem" class="filter-select" onchange="loadSubmissions()">
+            <option value="">All Problems</option>
+          </select>
+          <select id="filter-verdict" class="filter-select" onchange="loadSubmissions()">
+            <option value="">All Verdicts</option>
+            <option value="Accepted">Accepted</option>
+            <option value="Wrong Answer">Wrong Answer</option>
+            <option value="Time Limit Exceeded">TLE</option>
+            <option value="Runtime Error">Runtime Error</option>
+            <option value="Compilation Error">Compilation Error</option>
+            <option value="Pending">Pending</option>
+          </select>
+          <button class="btn btn-sm" style="background:var(--border);color:var(--text);"
+                  onclick="loadSubmissions()">Refresh</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th style="width:60px;">Prob</th>
+                  <th>Language</th>
+                  <th>Verdict</th>
+                  <th>Time</th>
+                  <th style="width:90px;"></th>
+                </tr>
+              </thead>
+              <tbody id="subs-tbody">
+                <tr class="empty-row"><td colspan="6">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Tab 2: Problem Stats ===== -->
+      <div id="tab-stats" class="tab-pane">
+        <div class="card">
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:50px;">Label</th>
+                  <th>Title</th>
+                  <th style="width:100px;">Submissions</th>
+                  <th style="width:90px;">Accepted</th>
+                  <th style="width:110px;">Unique Solvers</th>
+                  <th style="width:130px;">Solve Rate</th>
+                </tr>
+              </thead>
+              <tbody id="stats-tbody">
+                <tr class="empty-row"><td colspan="6">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Tab 3: Edit Contest ===== -->
+      <div id="tab-edit" class="tab-pane">
+        <div class="card" style="max-width:540px;">
+          <div class="card-header"><h3>Contest Details</h3></div>
+          <div class="card-body">
+            <div id="edit-alert" class="hidden" style="margin-bottom:1rem;"></div>
+            <form id="edit-form" onsubmit="saveEdit(event)">
+              <div class="form-group">
+                <label>Contest Name</label>
+                <input type="text" id="edit-name" class="form-control" required>
+              </div>
+              <div class="form-group">
+                <label>Description</label>
+                <textarea id="edit-desc" class="form-control" rows="3"></textarea>
+              </div>
+              <div class="form-group">
+                <label>New Password
+                  <span style="font-weight:400;color:var(--text-muted);font-size:0.78rem;">
+                    (leave blank to keep current)
+                  </span>
+                </label>
+                <input type="password" id="edit-password" class="form-control"
+                       placeholder="New password…">
+              </div>
+              <button type="submit" class="btn btn-primary" id="save-btn">Save Changes</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="danger-zone" style="max-width:540px;">
+          <h4>Danger Zone</h4>
+          <p>End the contest early. All submissions after this point will be blocked. This cannot be undone.</p>
+          <button onclick="doEndContest()" class="btn btn-danger btn-sm" id="end-btn">
+            End Contest Early
+          </button>
+          <div id="end-err" class="alert alert-error hidden" style="margin-top:0.75rem;max-width:400px;"></div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </main>
+</div>
+
+<!-- ===== Code-view modal ===== -->
+<div id="code-modal" class="modal-overlay hidden" onclick="closeCodeModal(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="document.getElementById('code-modal').classList.add('hidden')">✕</button>
+    <h3 id="code-modal-title">Submission Code</h3>
+    <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;">
+      <span id="cm-username" class="badge badge-pending"></span>
+      <span id="cm-problem"  class="badge badge-progress"></span>
+      <span id="cm-lang"     class="badge badge-ce"></span>
+      <span id="cm-verdict"></span>
+      <span id="cm-time"     style="font-size:0.8rem;color:var(--text-muted);align-self:center;"></span>
+    </div>
+    <pre id="cm-code" class="code-block"></pre>
+  </div>
+</div>
+
+<!-- ===== Add Problem modal ===== -->
+<div id="add-modal" class="modal-overlay hidden" onclick="closeAddModal(event)">
+  <div class="modal-box" style="max-width:580px;">
+    <button class="modal-close" onclick="document.getElementById('add-modal').classList.add('hidden')">✕</button>
+    <h3>Add Problem</h3>
+
+    <div id="add-alert" class="hidden" style="margin-bottom:1rem;"></div>
+
+    <!-- Type selector -->
+    <div class="type-toggle">
+      <button type="button" class="type-btn active" id="type-custom-btn"
+              onclick="setProblemType('custom')">Custom</button>
+      <button type="button" class="type-btn"        id="type-ext-btn"
+              onclick="setProblemType('external')">External</button>
+    </div>
+
+    <!-- Custom fields -->
+    <div id="custom-fields">
+      <div class="form-group">
+        <label>Title <span style="color:var(--red);">*</span></label>
+        <input type="text" id="p-title" class="form-control" placeholder="e.g. Two Sum">
+      </div>
+      <div class="form-group">
+        <label>Problem Statement <span style="color:var(--red);">*</span></label>
+        <textarea id="p-statement" class="form-control" rows="4"
+                  placeholder="Describe the problem…"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Input Format</label>
+          <textarea id="p-input-fmt" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Output Format</label>
+          <textarea id="p-output-fmt" class="form-control" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Constraints</label>
+        <textarea id="p-constraints" class="form-control" rows="2"></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Time Limit (ms)</label>
+          <input type="number" id="p-time-limit" class="form-control" value="1000" min="100">
+        </div>
+        <div class="form-group">
+          <label>Memory Limit (MB)</label>
+          <input type="number" id="p-mem-limit"  class="form-control" value="256"  min="16">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Hints</label>
+        <textarea id="p-hints" class="form-control" rows="2"></textarea>
+      </div>
+    </div>
+
+    <!-- External fields -->
+    <div id="external-fields" class="hidden">
+      <div class="form-group">
+        <label>Problem Title</label>
+        <input type="text" id="p-ext-title" class="form-control" placeholder="e.g. Two Sum">
+      </div>
+      <div class="form-group">
+        <label>Platform <span style="color:var(--red);">*</span></label>
+        <input type="text" id="p-platform" class="form-control"
+               placeholder="e.g. Codeforces, AtCoder">
+      </div>
+      <div class="form-group">
+        <label>Source URL <span style="color:var(--red);">*</span></label>
+        <input type="url" id="p-source-url" class="form-control"
+               placeholder="https://codeforces.com/problemset/problem/…">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:0.6rem;margin-top:0.5rem;">
+      <button type="button" class="btn btn-primary" id="add-submit-btn"
+              onclick="submitAddProblem()">Add Problem</button>
+      <button type="button" class="btn" style="background:var(--border);color:var(--text);"
+              onclick="document.getElementById('add-modal').classList.add('hidden')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+const params    = new URLSearchParams(location.search);
+const contestId = params.get('id');
+if (!contestId) { location.href = '/contests.html'; }
+
+let contestProblems = [];
+let addProblemType  = 'custom';
+
+// ================================================================
+// Bootstrap
+// ================================================================
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  window.location.href = '/login.html';
+}
+
+async function init() {
+  try {
+    const authData = await apiFetch('/auth/me');
+    if (authData) document.getElementById('nav-username').textContent = authData.user.username;
+  } catch (_) {}
+
+  try {
+    const data = await apiFetch(`/contests/${contestId}`);
+    if (!data) return;
+
+    if (!data.is_manager) {
+      location.href = `/contest.html?id=${contestId}`;
+      return;
+    }
+
+    contestProblems = data.problems || [];
+
+    document.title = `Manager — ${data.name}`;
+    document.getElementById('contest-name').textContent  = data.name;
+    document.getElementById('contest-link').href = `/contest.html?id=${contestId}`;
+
+    // Pre-fill edit form
+    document.getElementById('edit-name').value = data.name;
+    document.getElementById('edit-desc').value = data.description || '';
+
+    // Populate problem filter dropdown
+    const sel = document.getElementById('filter-problem');
+    data.problems.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value       = p.id;
+      opt.textContent = `${p.label} — ${p.title}`;
+      sel.appendChild(opt);
+    });
+
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('content').classList.remove('hidden');
+
+    // Load first two tabs immediately
+    loadSubmissions();
+    loadStats();
+  } catch (err) {
+    document.getElementById('loading').textContent = 'Failed to load manager panel.';
+    console.error(err);
+  }
+}
+
+// ================================================================
+// Tab switching
+// ================================================================
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (btn) btn.classList.add('active');
+}
+
+// ================================================================
+// Tab 1: All Submissions
+// ================================================================
+async function loadSubmissions() {
+  const problemId = document.getElementById('filter-problem').value;
+  const verdict   = document.getElementById('filter-verdict').value;
+
+  const qs = new URLSearchParams();
+  if (problemId) qs.set('problemId', problemId);
+  if (verdict)   qs.set('verdict',   verdict);
+
+  try {
+    const data = await apiFetch(
+      `/contests/${contestId}/manager/submissions?${qs.toString()}`
+    );
+    if (!data) return;
+    renderSubmissions(data.submissions);
+  } catch (err) {
+    document.getElementById('subs-tbody').innerHTML =
+      `<tr class="empty-row"><td colspan="6">${escHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderSubmissions(subs) {
+  const tbody = document.getElementById('subs-tbody');
+  if (!subs.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No submissions found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = subs.map(s => `
+    <tr>
+      <td>${escHtml(s.username)}</td>
+      <td><strong>${escHtml(s.problem_label)}</strong></td>
+      <td>${escHtml(s.language)}</td>
+      <td>${verdictBadge(s.verdict)}</td>
+      <td style="color:var(--text-muted);font-size:0.8rem;">${escHtml(timeAgo(s.submitted_at))}</td>
+      <td>
+        <button class="btn btn-sm"
+                style="background:var(--border);color:var(--text);font-size:0.75rem;"
+                onclick="viewCode(${s.submission_id})">
+          View Code
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// ================================================================
+// Code-view modal
+// ================================================================
+async function viewCode(submissionId) {
+  try {
+    const data = await apiFetch(`/contests/${contestId}/manager/submissions/${submissionId}`);
+    if (!data) return;
+
+    const s = data.submission;
+    document.getElementById('code-modal-title').textContent = `Submission #${s.id}`;
+    document.getElementById('cm-username').textContent = s.username;
+    document.getElementById('cm-problem').textContent  = `Problem ${escHtml(s.problem_label)}`;
+    document.getElementById('cm-lang').textContent     = s.language;
+    document.getElementById('cm-verdict').innerHTML    = verdictBadge(s.verdict);
+    document.getElementById('cm-time').textContent     =
+      timeAgo(s.submitted_at) +
+      (s.execution_time_ms != null ? ` · ${s.execution_time_ms}ms` : '');
+    document.getElementById('cm-code').textContent     = s.code || '(no code)';
+    document.getElementById('code-modal').classList.remove('hidden');
+  } catch (err) {
+    document.getElementById('code-modal-title').textContent = 'Error loading submission';
+    document.getElementById('cm-code').textContent = err.message || 'Failed to load submission.';
+    document.getElementById('code-modal').classList.remove('hidden');
+  }
+}
+
+function closeCodeModal(e) {
+  if (e.target === document.getElementById('code-modal')) {
+    document.getElementById('code-modal').classList.add('hidden');
+  }
+}
+
+// ================================================================
+// Tab 2: Problem Stats
+// ================================================================
+async function loadStats() {
+  try {
+    const data = await apiFetch(`/contests/${contestId}/manager/stats`);
+    if (!data) return;
+    renderStats(data.stats);
+  } catch (err) {
+    document.getElementById('stats-tbody').innerHTML =
+      `<tr class="empty-row"><td colspan="6">${escHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderStats(stats) {
+  const tbody = document.getElementById('stats-tbody');
+  if (!stats.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No problems yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = stats.map(s => {
+    const rate = s.total_submissions > 0
+      ? Math.round((s.accepted_count / s.total_submissions) * 100)
+      : 0;
+    return `
+      <tr>
+        <td><strong>${escHtml(s.label)}</strong></td>
+        <td>${escHtml(s.title)}</td>
+        <td style="text-align:center;">${s.total_submissions}</td>
+        <td style="text-align:center;">${s.accepted_count}</td>
+        <td style="text-align:center;">${s.unique_solvers}</td>
+        <td>
+          <span class="rate-bar"><span class="rate-fill" style="width:${rate}%;"></span></span>
+          ${rate}%
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ================================================================
+// Tab 3: Edit Contest
+// ================================================================
+async function saveEdit(e) {
+  e.preventDefault();
+  const alertEl = document.getElementById('edit-alert');
+  const btn     = document.getElementById('save-btn');
+  alertEl.classList.add('hidden');
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  const body = {
+    name:        document.getElementById('edit-name').value,
+    description: document.getElementById('edit-desc').value,
+    password:    document.getElementById('edit-password').value,
+  };
+
+  try {
+    await apiFetch(`/contests/${contestId}`, { method: 'PATCH', body });
+    alertEl.className   = 'alert alert-success';
+    alertEl.textContent = 'Saved successfully.';
+    alertEl.classList.remove('hidden');
+    document.getElementById('edit-password').value = '';
+    document.getElementById('contest-name').textContent = body.name;
+    document.title = `Manager — ${body.name}`;
+  } catch (err) {
+    alertEl.className   = 'alert alert-error';
+    alertEl.textContent = err.message || 'Save failed.';
+    alertEl.classList.remove('hidden');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Save Changes';
+  }
+}
+
+async function doEndContest() {
+  if (!confirm('End this contest now? This cannot be undone.')) return;
+  const btn = document.getElementById('end-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Ending…';
+  try {
+    await apiFetch(`/contests/${contestId}/end`, { method: 'POST' });
+    btn.textContent = 'Contest Ended';
+    location.href = `/contest.html?id=${contestId}`;
+  } catch (err) {
+    const errEl = document.getElementById('end-err');
+    errEl.textContent = err.message || 'Failed to end contest.';
+    errEl.classList.remove('hidden');
+    btn.disabled    = false;
+    btn.textContent = 'End Contest Early';
+  }
+}
+
+// ================================================================
+// Add Problem modal
+// ================================================================
+function openAddProblem() {
+  document.getElementById('add-modal').classList.remove('hidden');
+  document.getElementById('add-alert').classList.add('hidden');
+  setProblemType('custom');
+}
+
+function closeAddModal(e) {
+  if (e.target === document.getElementById('add-modal')) {
+    document.getElementById('add-modal').classList.add('hidden');
+  }
+}
+
+function setProblemType(type) {
+  addProblemType = type;
+  const isCustom = (type === 'custom');
+  document.getElementById('custom-fields').classList.toggle('hidden', !isCustom);
+  document.getElementById('external-fields').classList.toggle('hidden', isCustom);
+  document.getElementById('type-custom-btn').classList.toggle('active', isCustom);
+  document.getElementById('type-ext-btn').classList.toggle('active', !isCustom);
+}
+
+async function submitAddProblem() {
+  const alertEl = document.getElementById('add-alert');
+  const btn     = document.getElementById('add-submit-btn');
+  alertEl.classList.add('hidden');
+  btn.disabled    = true;
+  btn.textContent = 'Adding…';
+
+  try {
+    let body;
+    if (addProblemType === 'custom') {
+      const title     = document.getElementById('p-title').value.trim();
+      const statement = document.getElementById('p-statement').value.trim();
+      if (!title || !statement) throw new Error('Title and Statement are required');
+
+      body = {
+        type:             'custom',
+        title,
+        statement,
+        input_format:     document.getElementById('p-input-fmt').value.trim()    || undefined,
+        output_format:    document.getElementById('p-output-fmt').value.trim()   || undefined,
+        constraints_text: document.getElementById('p-constraints').value.trim()  || undefined,
+        time_limit_ms:    parseInt(document.getElementById('p-time-limit').value) || 1000,
+        memory_limit_mb:  parseInt(document.getElementById('p-mem-limit').value)  || 256,
+        hints:            document.getElementById('p-hints').value.trim()         || undefined,
+      };
+    } else {
+      const platform   = document.getElementById('p-platform').value.trim();
+      const source_url = document.getElementById('p-source-url').value.trim();
+      if (!platform || !source_url) throw new Error('Platform and Source URL are required');
+      body = {
+        type:       'external',
+        platform,
+        source_url,
+        title:      document.getElementById('p-ext-title').value.trim() || source_url,
+      };
+    }
+
+    const result = await apiFetch(`/contests/${contestId}/problems`, {
+      method: 'POST', body,
+    });
+
+    alertEl.className   = 'alert alert-success';
+    alertEl.textContent = `Problem ${result.label} added successfully!`;
+    alertEl.classList.remove('hidden');
+
+    // Refresh problem filter dropdown
+    const sel = document.getElementById('filter-problem');
+    const opt = document.createElement('option');
+    opt.value       = result.problem_id;
+    opt.textContent = `${result.label} — ${body.title || body.statement?.slice(0,40)}`;
+    sel.appendChild(opt);
+
+    // Reload stats
+    loadStats();
+  } catch (err) {
+    alertEl.className   = 'alert alert-error';
+    alertEl.textContent = err.message || 'Failed to add problem.';
+    alertEl.classList.remove('hidden');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Add Problem';
+  }
+}
+
+// ================================================================
+// Start
+// ================================================================
+init();
+</script>
+</body>
+</html>

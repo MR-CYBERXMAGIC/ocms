@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Contest — Contest System</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
+
+    .problem-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+      background: var(--card-bg);
+    }
+    .problem-list-item .label-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.8rem;
+      flex-shrink: 0;
+      margin-right: 0.75rem;
+    }
+
+    .tc-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin-bottom: 0.35rem;
+      font-size: 0.8rem;
+      background: var(--card-bg);
+    }
+    .tc-row .tc-preview {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: 'SF Mono', Consolas, monospace;
+      color: var(--text);
+    }
+
+    textarea.form-control { resize: vertical; min-height: 80px; font-family: inherit; }
+    .section-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1.25rem 0;
+    }
+    .form-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Contest System</h1>
+      <p>Programming Contests</p>
+    </div>
+    <ul class="sidebar-nav">
+      <li><a href="/">🏠&nbsp; Home</a></li>
+      <li><a href="/contests.html" class="active">🏆&nbsp; Contests</a></li>
+      <li><a href="/users.html">👥&nbsp; Users</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <strong id="nav-username">—</strong>
+        Logged in
+      </div>
+      <button onclick="doLogout()" class="btn btn-danger btn-sm btn-full">Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="page-header">
+      <h2>Create Contest</h2>
+      <p>Set up a new programming contest</p>
+    </div>
+
+    <!-- Step indicator -->
+    <div class="steps">
+      <div class="step-indicator active" id="step-ind-1">1 — Contest Details</div>
+      <div class="step-indicator" id="step-ind-2">2 — Add Problems</div>
+    </div>
+
+    <div id="global-err" class="alert alert-error hidden"></div>
+
+    <!-- ── STEP 1: Contest Details ── -->
+    <div class="step-panel active" id="step1">
+      <div class="card" style="max-width:600px;">
+        <div class="card-body">
+
+          <div class="form-group">
+            <label for="contest-name">Contest Name <span style="color:var(--red)">*</span></label>
+            <input type="text" id="contest-name" class="form-control"
+                   placeholder="e.g. Spring Cup 2026" maxlength="120">
+          </div>
+
+          <div class="form-group">
+            <label for="contest-password">Password <span class="form-hint" style="font-weight:400;">(optional — leave blank for public)</span></label>
+            <input type="password" id="contest-password" class="form-control"
+                   placeholder="Leave blank for a public contest">
+          </div>
+
+          <div class="form-group">
+            <label for="start-time">Start Time <span style="color:var(--red)">*</span></label>
+            <input type="datetime-local" id="start-time" class="form-control">
+          </div>
+
+          <div class="form-group">
+            <label>Duration <span style="color:var(--red)">*</span></label>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0;">
+                <input type="number" id="dur-hours" class="form-control" min="0" max="72"
+                       placeholder="Hours" value="2">
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <input type="number" id="dur-minutes" class="form-control" min="0" max="59"
+                       placeholder="Minutes" value="0">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="description">Description <span class="form-hint" style="font-weight:400;">(optional)</span></label>
+            <textarea id="description" class="form-control" rows="3"
+                      placeholder="Contest rules, topics, grading system…"></textarea>
+          </div>
+
+          <div id="step1-err" class="alert alert-error hidden"></div>
+
+          <button onclick="goToStep2()" class="btn btn-primary">Next: Add Problems →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 2: Add Problems ── -->
+    <div class="step-panel" id="step2">
+      <div style="display:grid;grid-template-columns:1fr 300px;gap:1.5rem;align-items:start;">
+
+        <!-- Add problem panel -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Add Problem</h3>
+          </div>
+          <div class="card-body">
+
+            <!-- Tabs -->
+            <div class="tabs">
+              <button class="tab-btn active" onclick="switchTab('external', this)">External</button>
+              <button class="tab-btn"        onclick="switchTab('custom', this)">Custom</button>
+            </div>
+
+            <!-- External Tab -->
+            <div class="tab-pane active" id="tab-external">
+              <div class="form-group">
+                <label>Platform <span style="color:var(--red)">*</span></label>
+                <select id="ext-platform" class="form-control">
+                  <option value="">Select platform…</option>
+                  <option value="CSES">CSES</option>
+                  <option value="CodeChef">CodeChef</option>
+                  <option value="HackerRank">HackerRank</option>
+                  <option value="USACO">USACO</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Problem URL <span style="color:var(--red)">*</span></label>
+                <input type="url" id="ext-url" class="form-control" placeholder="https://…">
+              </div>
+              <div class="form-group">
+                <label>Title <span class="form-hint" style="font-weight:400;">(optional — URL used if blank)</span></label>
+                <input type="text" id="ext-title" class="form-control" placeholder="Problem title">
+              </div>
+              <div id="ext-err" class="alert alert-error hidden"></div>
+              <button onclick="addExternalProblem()" class="btn btn-primary">Add Problem</button>
+            </div>
+
+            <!-- Custom Tab -->
+            <div class="tab-pane" id="tab-custom">
+              <div class="form-group">
+                <label>Title <span style="color:var(--red)">*</span></label>
+                <input type="text" id="cust-title" class="form-control" placeholder="Problem title">
+              </div>
+              <div class="form-group">
+                <label>Statement <span style="color:var(--red)">*</span></label>
+                <textarea id="cust-statement" class="form-control" rows="4"
+                          placeholder="Problem statement…"></textarea>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Input Format</label>
+                  <textarea id="cust-input-fmt" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                  <label>Output Format</label>
+                  <textarea id="cust-output-fmt" class="form-control" rows="2"></textarea>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Constraints</label>
+                <textarea id="cust-constraints" class="form-control" rows="2"></textarea>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Time Limit (ms)</label>
+                  <input type="number" id="cust-tl" class="form-control" value="1000" min="100">
+                </div>
+                <div class="form-group">
+                  <label>Memory Limit (MB)</label>
+                  <input type="number" id="cust-ml" class="form-control" value="256" min="16">
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Hints <span class="form-hint" style="font-weight:400;">(optional)</span></label>
+                <textarea id="cust-hints" class="form-control" rows="2"></textarea>
+              </div>
+
+              <hr class="section-divider">
+              <div style="font-size:0.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.75rem;">Test Cases</div>
+
+              <!-- Add one by one -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:0.5rem;">
+                <div>
+                  <label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:0.3rem;">Input</label>
+                  <textarea id="tc-input" class="form-control" rows="3"
+                            style="font-family:'SF Mono',Consolas,monospace;font-size:0.8rem;"></textarea>
+                </div>
+                <div>
+                  <label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:0.3rem;">Expected Output</label>
+                  <textarea id="tc-output" class="form-control" rows="3"
+                            style="font-family:'SF Mono',Consolas,monospace;font-size:0.8rem;"></textarea>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.875rem;cursor:pointer;">
+                  <input type="checkbox" id="tc-hidden"> Hidden test case
+                </label>
+                <button onclick="addTestCase()" class="btn btn-sm" style="background:var(--border);color:var(--text);">
+                  + Add Test Case
+                </button>
+                <label class="btn btn-sm" style="background:var(--border);color:var(--text);cursor:pointer;">
+                  Upload CSV
+                  <input type="file" id="tc-csv" accept=".csv" style="display:none;" onchange="handleCSVUpload(event)">
+                </label>
+              </div>
+
+              <!-- Test cases list -->
+              <div id="tc-list" style="margin-bottom:0.75rem;max-height:180px;overflow-y:auto;"></div>
+              <div id="tc-empty" style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.75rem;">
+                No test cases added yet.
+              </div>
+
+              <div id="cust-err" class="alert alert-error hidden"></div>
+              <button onclick="addCustomProblem()" class="btn btn-primary">Add Problem</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Problem list + submit -->
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <h3>Problems Added</h3>
+              <span id="prob-count" class="badge badge-pending">0</span>
+            </div>
+            <div class="card-body" style="padding:0.75rem;">
+              <div id="problem-list">
+                <div id="prob-empty" style="text-align:center;color:var(--text-muted);font-size:0.8rem;padding:1rem 0;">
+                  No problems added yet
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="submit-err" class="alert alert-error hidden"></div>
+          <div id="submit-success" class="alert alert-success hidden"></div>
+
+          <button onclick="submitContest()" id="submit-btn" class="btn btn-primary btn-full">
+            Create Contest
+          </button>
+          <button onclick="backToStep1()" class="btn btn-full"
+                  style="background:var(--border);color:var(--text);margin-top:0.5rem;">
+            ← Back to Details
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  // ── State ──────────────────────────────────────────────────
+  let step1Data     = {};
+  let pendingProblems = [];   // [{type, ...fields, test_cases?}]
+  let customTestCases = [];   // current custom problem's test cases
+
+  // ── Auth gate ──────────────────────────────────────────────
+  (async () => {
+    const authData = await apiFetch('/auth/me');
+    if (!authData) return;
+    document.getElementById('nav-username').textContent = authData.user.username;
+
+    // Set minimum start time to 5 min from now
+    const minDate = new Date(Date.now() + 5 * 60 * 1000);
+    document.getElementById('start-time').min = minDate.toISOString().slice(0, 16);
+  })();
+
+  async function doLogout() {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    window.location.href = '/login.html';
+  }
+
+  // ── Step navigation ────────────────────────────────────────
+  function goToStep2() {
+    const name     = document.getElementById('contest-name').value.trim();
+    const startRaw = document.getElementById('start-time').value;
+    const hours    = parseInt(document.getElementById('dur-hours').value)   || 0;
+    const minutes  = parseInt(document.getElementById('dur-minutes').value) || 0;
+    const errEl    = document.getElementById('step1-err');
+    errEl.classList.add('hidden');
+
+    if (!name) return showError(errEl, 'Contest name is required.');
+    if (!startRaw) return showError(errEl, 'Start time is required.');
+    if (new Date(startRaw) <= new Date()) return showError(errEl, 'Start time must be in the future.');
+    const durMins = hours * 60 + minutes;
+    if (durMins <= 0) return showError(errEl, 'Duration must be at least 1 minute.');
+
+    step1Data = {
+      name,
+      password:         document.getElementById('contest-password').value || null,
+      start_time:       startRaw,
+      duration_minutes: durMins,
+      description:      document.getElementById('description').value.trim() || null,
+    };
+
+    document.getElementById('step1').classList.remove('active');
+    document.getElementById('step2').classList.add('active');
+    document.getElementById('step-ind-1').classList.remove('active');
+    document.getElementById('step-ind-1').classList.add('done');
+    document.getElementById('step-ind-2').classList.add('active');
+  }
+
+  function backToStep1() {
+    document.getElementById('step2').classList.remove('active');
+    document.getElementById('step1').classList.add('active');
+    document.getElementById('step-ind-2').classList.remove('active');
+    document.getElementById('step-ind-1').classList.remove('done');
+    document.getElementById('step-ind-1').classList.add('active');
+  }
+
+  // ── Tabs ───────────────────────────────────────────────────
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  // ── External problem ───────────────────────────────────────
+  function addExternalProblem() {
+    const platform   = document.getElementById('ext-platform').value;
+    const source_url = document.getElementById('ext-url').value.trim();
+    const title      = document.getElementById('ext-title').value.trim();
+    const errEl      = document.getElementById('ext-err');
+    errEl.classList.add('hidden');
+
+    if (!platform) return showError(errEl, 'Please select a platform.');
+    if (!source_url) return showError(errEl, 'Problem URL is required.');
+
+    pendingProblems.push({ type: 'external', platform, source_url, title: title || source_url });
+    renderProblemList();
+
+    // Reset form
+    document.getElementById('ext-platform').value = '';
+    document.getElementById('ext-url').value = '';
+    document.getElementById('ext-title').value = '';
+  }
+
+  // ── Custom problem ─────────────────────────────────────────
+  function addTestCase() {
+    const input  = document.getElementById('tc-input').value;
+    const output = document.getElementById('tc-output').value;
+    if (!input || !output) {
+      showError(document.getElementById('cust-err'), 'Both input and expected output are required.');
+      return;
+    }
+    document.getElementById('cust-err').classList.add('hidden');
+    const is_hidden = document.getElementById('tc-hidden').checked;
+    customTestCases.push({ input, expected_output: output, is_hidden });
+    document.getElementById('tc-input').value  = '';
+    document.getElementById('tc-output').value = '';
+    document.getElementById('tc-hidden').checked = false;
+    renderTestCaseList();
+  }
+
+  function removeTestCase(idx) {
+    customTestCases.splice(idx, 1);
+    renderTestCaseList();
+  }
+
+  function renderTestCaseList() {
+    const list  = document.getElementById('tc-list');
+    const empty = document.getElementById('tc-empty');
+    if (!customTestCases.length) {
+      list.innerHTML = '';
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+    list.innerHTML = customTestCases.map((tc, i) => `
+      <div class="tc-row">
+        <span class="badge ${tc.is_hidden ? 'badge-ce' : 'badge-ac'}">${tc.is_hidden ? 'Hidden' : 'Sample'}</span>
+        <span class="tc-preview">${escHtml(tc.input.split('\n')[0])} → ${escHtml(tc.expected_output.split('\n')[0])}</span>
+        <button onclick="removeTestCase(${i})" class="btn btn-sm btn-danger" style="padding:0.2rem 0.5rem;font-size:0.7rem;">✕</button>
+      </div>
+    `).join('');
+  }
+
+  function handleCSVUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const rows = parseClientCSV(e.target.result);
+      const startIdx = rows.length > 0 && rows[0][0].toLowerCase() === 'input' ? 1 : 0;
+      for (let r = startIdx; r < rows.length; r++) {
+        const row = rows[r];
+        if (row.length < 3) continue;
+        const is_hidden = row[2].trim().toLowerCase() === 'true' || row[2].trim() === '1';
+        customTestCases.push({ input: row[0], expected_output: row[1], is_hidden });
+      }
+      renderTestCaseList();
+    };
+    reader.readAsText(file);
+    event.target.value = ''; // reset so same file can be re-uploaded
+  }
+
+  function parseClientCSV(text) {
+    const rows = [];
+    let i = 0, n = text.length;
+    while (i < n) {
+      const row = [];
+      while (i < n) {
+        let field = '';
+        if (text[i] === '"') {
+          i++;
+          while (i < n) {
+            if (text[i] === '"' && i + 1 < n && text[i+1] === '"') { field += '"'; i += 2; }
+            else if (text[i] === '"') { i++; break; }
+            else { field += text[i++]; }
+          }
+        } else {
+          while (i < n && text[i] !== ',' && text[i] !== '\n' && text[i] !== '\r') {
+            field += text[i++];
+          }
+          field = field.trim();
+        }
+        row.push(field);
+        if (i < n && text[i] === ',') { i++; }
+        else { break; }
+      }
+      if (i < n && text[i] === '\r') i++;
+      if (i < n && text[i] === '\n') i++;
+      if (row.length > 0 && !(row.length === 1 && row[0] === '')) rows.push(row);
+    }
+    return rows;
+  }
+
+  function addCustomProblem() {
+    const title       = document.getElementById('cust-title').value.trim();
+    const statement   = document.getElementById('cust-statement').value.trim();
+    const errEl       = document.getElementById('cust-err');
+    errEl.classList.add('hidden');
+
+    if (!title)     return showError(errEl, 'Title is required.');
+    if (!statement) return showError(errEl, 'Statement is required.');
+
+    pendingProblems.push({
+      type:             'custom',
+      title,
+      statement,
+      input_format:     document.getElementById('cust-input-fmt').value.trim()   || null,
+      output_format:    document.getElementById('cust-output-fmt').value.trim()  || null,
+      constraints_text: document.getElementById('cust-constraints').value.trim() || null,
+      time_limit_ms:    parseInt(document.getElementById('cust-tl').value)  || 1000,
+      memory_limit_mb:  parseInt(document.getElementById('cust-ml').value)  || 256,
+      hints:            document.getElementById('cust-hints').value.trim()        || null,
+      test_cases:       [...customTestCases],
+    });
+
+    renderProblemList();
+
+    // Reset custom form
+    ['cust-title','cust-statement','cust-input-fmt','cust-output-fmt',
+     'cust-constraints','cust-hints'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('cust-tl').value = '1000';
+    document.getElementById('cust-ml').value = '256';
+    customTestCases = [];
+    renderTestCaseList();
+  }
+
+  // ── Problem list rendering ─────────────────────────────────
+  function renderProblemList() {
+    const el    = document.getElementById('problem-list');
+    const empty = document.getElementById('prob-empty');
+    document.getElementById('prob-count').textContent = pendingProblems.length;
+
+    if (!pendingProblems.length) {
+      el.innerHTML = '';
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+    el.innerHTML = pendingProblems.map((p, i) => {
+      const label  = String.fromCharCode(65 + i);
+      const typeTag = p.type === 'external'
+        ? `<span class="badge badge-pending" style="font-size:0.65rem;">${escHtml(p.platform)}</span>`
+        : `<span class="badge badge-progress" style="font-size:0.65rem;">Custom</span>`;
+      return `
+        <div class="problem-list-item">
+          <div style="display:flex;align-items:center;flex:1;min-width:0;">
+            <span class="label-pill">${label}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;font-size:0.875rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                ${escHtml(p.title)}
+              </div>
+              <div style="margin-top:0.2rem;">${typeTag}</div>
+            </div>
+          </div>
+          <button onclick="removeProblem(${i})" class="btn btn-sm btn-danger"
+                  style="padding:0.2rem 0.5rem;font-size:0.7rem;margin-left:0.5rem;">✕</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function removeProblem(idx) {
+    pendingProblems.splice(idx, 1);
+    renderProblemList();
+  }
+
+  // ── Submit contest ─────────────────────────────────────────
+  async function submitContest() {
+    const btn     = document.getElementById('submit-btn');
+    const errEl   = document.getElementById('submit-err');
+    const succEl  = document.getElementById('submit-success');
+    errEl.classList.add('hidden');
+    succEl.classList.add('hidden');
+
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+
+    try {
+      // 1. Create contest
+      const created = await apiFetch('/contests', { method: 'POST', body: step1Data });
+      if (!created) return;
+      const contestId = created.id;
+
+      // 2. Add each problem
+      for (const prob of pendingProblems) {
+        await apiFetch(`/contests/${contestId}/problems`, { method: 'POST', body: prob });
+      }
+
+      succEl.textContent = 'Contest created! Redirecting…';
+      succEl.classList.remove('hidden');
+      setTimeout(() => { window.location.href = `/contest.html?id=${contestId}`; }, 1000);
+    } catch (err) {
+      showError(errEl, err.message || 'Failed to create contest.');
+      btn.disabled = false;
+      btn.textContent = 'Create Contest';
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────
+  function showError(el, msg) {
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+
+  renderProblemList();
+  renderTestCaseList();
+</script>
+</body>
+</html>
