@@ -131,6 +131,26 @@
       <!-- Action bar -->
       <div id="action-bar" style="margin-bottom:1.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;"></div>
 
+      <!-- Description + preview info (always visible) -->
+      <div id="contest-info" class="card hidden" style="margin-bottom:1.25rem;">
+        <div class="card-header"><h3>About this Contest</h3></div>
+        <div style="padding:1rem 1.25rem;">
+          <p id="contest-description" style="color:var(--text-muted);margin:0 0 1rem;"></p>
+          <div style="display:flex;gap:2rem;flex-wrap:wrap;font-size:0.875rem;">
+            <span>👥 <strong id="info-participants">—</strong> registered</span>
+            <span>📋 <strong id="info-problems">—</strong> problems</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shown when problems are not accessible -->
+      <div id="locked-notice" class="hidden"
+           style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;
+                  padding:2.5rem;text-align:center;margin-bottom:1.25rem;">
+        <div style="font-size:2.5rem;margin-bottom:0.75rem;">🔒</div>
+        <div id="locked-msg" style="font-weight:600;color:var(--text-muted);font-size:0.95rem;"></div>
+      </div>
+
       <!-- Contest layout -->
       <div class="contest-layout">
 
@@ -205,6 +225,7 @@
   </div>
 </div>
 
+<script src="/js/toast.js"></script>
 <script src="/js/api.js"></script>
 <script>
   const params     = new URLSearchParams(location.search);
@@ -322,8 +343,15 @@
     const bar = document.getElementById('action-bar');
     const bits = [];
 
-    if (!c.is_joined) {
-      bits.push(`<button onclick="openJoinModal()" class="btn btn-primary">Join Contest</button>`);
+    if (!c.is_joined && c.contest_state !== 'ended') {
+      const label = c.contest_state === 'upcoming' ? 'Register for Contest' : 'Join Contest';
+      bits.push(`<button onclick="openJoinModal()" class="btn btn-primary">${label}</button>`);
+    }
+    if (c.is_joined && c.contest_state === 'upcoming') {
+      bits.push(`<span style="color:var(--green);font-weight:600;font-size:0.875rem;
+                              display:flex;align-items:center;gap:0.4rem;">
+                   ✅ You are registered
+                 </span>`);
     }
 
     bits.push(`<a href="/leaderboard.html?id=${contestId}" class="btn"
@@ -456,26 +484,53 @@
       document.getElementById('contest-meta').textContent =
         `${startStr} · ${durStr}` + (contest.is_protected ? ' · 🔒 Password protected' : '');
 
+      // Populate info card
+      const descEl = document.getElementById('contest-description');
+      descEl.textContent = contest.description || 'No description provided.';
+      if (!contest.description) descEl.style.fontStyle = 'italic';
+      document.getElementById('info-participants').textContent = contest.participant_count ?? 0;
+      document.getElementById('info-problems').textContent     = contest.problem_count     ?? 0;
+      document.getElementById('contest-info').classList.remove('hidden');
+
       startTimer();
       renderActionBar(contest);
-      renderProblems(contest.problems);
 
-      // Initial score: use contest API response for immediate display
-      if (contest.is_joined && contest.user_score) {
-        renderScorePanel(contest.user_rank, contest.user_score.solved, contest.user_score.penalty);
-      }
+      // Determine whether this user may see problems
+      const canSeeProblems =
+        contest.contest_state === 'ended' ||
+        (contest.contest_state === 'running' && (contest.is_joined || contest.is_manager));
 
-      // Live score refresh from leaderboard every 30 s while contest is running
-      if (contest.is_joined && !isEnded) {
-        refreshScoreFromLeaderboard();
-        scoreRefreshTimer = setInterval(() => {
-          if (Date.now() >= timerEnd) {
-            clearInterval(scoreRefreshTimer);
-            document.getElementById('ended-banner').classList.remove('hidden');
-            return;
-          }
+      if (!canSeeProblems) {
+        const msg = contest.contest_state === 'upcoming'
+          ? 'Problems will be revealed when the contest starts.'
+          : 'Join the contest to access the problems.';
+        document.getElementById('locked-msg').textContent = msg;
+        document.getElementById('locked-notice').classList.remove('hidden');
+        document.querySelector('.contest-layout').style.display = 'none';
+
+        // Reload the page the moment an upcoming contest goes live
+        if (contest.contest_state === 'upcoming') {
+          const msUntilStart = new Date(contest.start_time) - Date.now();
+          if (msUntilStart > 0) setTimeout(() => location.reload(), msUntilStart + 500);
+        }
+      } else {
+        renderProblems(contest.problems || []);
+
+        if (contest.is_joined && contest.user_score) {
+          renderScorePanel(contest.user_rank, contest.user_score.solved, contest.user_score.penalty);
+        }
+
+        if (contest.is_joined && !isEnded) {
           refreshScoreFromLeaderboard();
-        }, 30000);
+          scoreRefreshTimer = setInterval(() => {
+            if (Date.now() >= timerEnd) {
+              clearInterval(scoreRefreshTimer);
+              document.getElementById('ended-banner').classList.remove('hidden');
+              return;
+            }
+            refreshScoreFromLeaderboard();
+          }, 30000);
+        }
       }
 
       document.getElementById('loading').classList.add('hidden');

@@ -10,17 +10,18 @@ const listContests = async (req, res) => {
       SELECT
         c.id,
         c.name,
-        CASE WHEN c.start_time <= NOW() THEN 'Running' ELSE 'Upcoming' END AS status,
+        CASE WHEN c.start_time <= NOW() THEN 'running' ELSE 'upcoming' END AS status,
         c.start_time,
         c.duration_minutes,
-        COUNT(DISTINCT cp.user_id)::INT   AS participant_count,
+        (c.password_hash IS NOT NULL)       AS is_password_protected,
+        COUNT(DISTINCT cp.user_id)::INT     AS participant_count,
         COUNT(DISTINCT cpb.problem_id)::INT AS problem_count
       FROM contests c
       LEFT JOIN contest_participants cp  ON cp.contest_id  = c.id
       LEFT JOIN contest_problems    cpb ON cpb.contest_id = c.id
       WHERE c.is_ended = FALSE
         AND (c.start_time + (c.duration_minutes || ' minutes')::interval) > NOW()
-      GROUP BY c.id, c.name, c.start_time, c.duration_minutes
+      GROUP BY c.id, c.name, c.start_time, c.duration_minutes, c.password_hash
       ORDER BY
         CASE WHEN c.start_time <= NOW() THEN 0 ELSE 1 END ASC,
         c.start_time ASC
@@ -73,6 +74,17 @@ const createContest = async (req, res) => {
   }
 };
 
+// Pure helper — determines contest phase from DB row fields.
+function getContestState(contest) {
+  if (contest.is_ended) return 'ended';
+  const now   = new Date();
+  const start = new Date(contest.start_time);
+  const end   = new Date(start.getTime() + contest.duration_minutes * 60000);
+  if (now < start)              return 'upcoming';
+  if (now >= start && now < end) return 'running';
+  return 'ended';
+}
+
 // GET /api/contests/:id
 const getContest = async (req, res) => {
   const { id } = req.params;
@@ -80,73 +92,121 @@ const getContest = async (req, res) => {
 
   try {
     const { rows: contestRows } = await pool.query(
-      `SELECT id, name, description, start_time, duration_minutes, created_by, is_ended,
-              (password_hash IS NOT NULL) AS is_protected
-       FROM contests WHERE id = $1`,
+      `SELECT c.*,
+              (c.password_hash IS NOT NULL)       AS is_password_protected,
+              COUNT(DISTINCT cpb.problem_id)::INT AS problem_count,
+              COUNT(DISTINCT cpart.user_id)::INT  AS participant_count
+         FROM contests c
+         LEFT JOIN contest_problems    cpb   ON cpb.contest_id   = c.id
+         LEFT JOIN contest_participants cpart ON cpart.contest_id = c.id
+        WHERE c.id = $1
+        GROUP BY c.id`,
       [id]
     );
     if (!contestRows.length) return res.status(404).json({ error: 'Contest not found' });
 
-    const contest = contestRows[0];
-    const endMs = new Date(contest.start_time).getTime() + contest.duration_minutes * 60 * 1000;
-    const time_remaining_seconds = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
-
-    const { rows: problems } = await pool.query(
-      `SELECT cp.label, p.id, p.title, p.type, p.platform,
-              COUNT(DISTINCT s.user_id) FILTER (WHERE s.verdict = 'Accepted')::INT AS solved_by_count
-       FROM contest_problems cp
-       JOIN problems p ON p.id = cp.problem_id
-       LEFT JOIN submissions s ON s.problem_id = p.id AND s.contest_id = $1
-       WHERE cp.contest_id = $1
-       GROUP BY cp.label, p.id, p.title, p.type, p.platform
-       ORDER BY cp.label ASC`,
-      [id]
-    );
+    const contest       = contestRows[0];
+    const contest_state = getContestState(contest);
 
     let is_joined  = false;
     let is_manager = false;
-    let user_score = null;
-    let user_rank  = null;
 
     if (userId) {
       const { rows: joinRows } = await pool.query(
-        `SELECT 1 FROM contest_participants WHERE contest_id = $1 AND user_id = $2`,
+        `SELECT 1 FROM contest_participants WHERE contest_id = $1 AND user_id = $2 LIMIT 1`,
         [id, userId]
       );
       is_joined  = joinRows.length > 0;
       is_manager = Number(contest.created_by) === Number(userId);
-
-      if (is_joined) {
-        const { rows: scoreRows } = await pool.query(
-          `SELECT solved, penalty FROM contest_scores WHERE contest_id = $1 AND user_id = $2`,
-          [id, userId]
-        );
-        if (scoreRows.length) {
-          const { solved, penalty } = scoreRows[0];
-          user_score = { solved, penalty };
-          const { rows: rankRows } = await pool.query(
-            `SELECT (COUNT(*) + 1)::INT AS rank
-             FROM contest_scores
-             WHERE contest_id = $1
-               AND (solved > $2 OR (solved = $2 AND penalty < $3))`,
-            [id, solved, penalty]
-          );
-          user_rank = rankRows[0].rank;
-        }
-      }
     }
 
-    res.json({
+    // Base payload — safe for all viewers at all states
+    const base = {
       id:                    contest.id,
       name:                  contest.name,
       description:           contest.description,
       start_time:            contest.start_time,
       duration_minutes:      contest.duration_minutes,
       is_ended:              contest.is_ended,
-      is_protected:          contest.is_protected,
-      problems,
+      is_password_protected: contest.is_password_protected,
+      participant_count:     Number(contest.participant_count),
+      problem_count:         Number(contest.problem_count),
+      contest_state,
       is_joined,
       is_manager,
+    };
+
+    // Upcoming, or running but user has not joined (and is not manager):
+    // return preview only — no problems array.
+    if (contest_state === 'upcoming' ||
+        (contest_state === 'running' && !is_joined && !is_manager)) {
+      return res.json(base);
+    }
+
+    // Running (joined/manager) or ended: include problems with per-user verdicts
+    const { rows: problems } = await pool.query(
+      `SELECT cp.label, p.id, p.title, p.type, p.platform,
+              COUNT(DISTINCT s.user_id) FILTER (WHERE s.verdict = 'Accepted')::INT AS solved_by_count
+         FROM contest_problems cp
+         JOIN problems p ON p.id = cp.problem_id
+         LEFT JOIN submissions s ON s.problem_id = p.id AND s.contest_id = $1
+        WHERE cp.contest_id = $1
+        GROUP BY cp.label, p.id, p.title, p.type, p.platform
+        ORDER BY cp.label ASC`,
+      [id]
+    );
+
+    if (userId && is_joined) {
+      for (const prob of problems) {
+        const { rows: subRows } = await pool.query(
+          `SELECT verdict FROM submissions
+            WHERE contest_id = $1 AND problem_id = $2 AND user_id = $3
+            ORDER BY submitted_at DESC`,
+          [id, prob.id, userId]
+        );
+        if (!subRows.length) {
+          prob.user_verdict = null;
+        } else {
+          const hasAc = subRows.some(s => s.verdict === 'Accepted');
+          prob.user_verdict = hasAc
+            ? 'Accepted'
+            : `${subRows.length} attempt${subRows.length !== 1 ? 's' : ''}`;
+        }
+      }
+    } else {
+      problems.forEach(p => { p.user_verdict = null; });
+    }
+
+    // Score + rank for joined participants
+    let user_score = null;
+    let user_rank  = null;
+
+    if (userId && is_joined) {
+      const { rows: scoreRows } = await pool.query(
+        `SELECT solved, penalty FROM contest_scores WHERE contest_id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      if (scoreRows.length) {
+        const { solved, penalty } = scoreRows[0];
+        user_score = { solved, penalty };
+        const { rows: rankRows } = await pool.query(
+          `SELECT (COUNT(*) + 1)::INT AS rank
+             FROM contest_scores
+            WHERE contest_id = $1
+              AND (solved > $2 OR (solved = $2 AND penalty < $3))`,
+          [id, solved, penalty]
+        );
+        user_rank = rankRows[0].rank;
+      }
+    }
+
+    const startMs = new Date(contest.start_time).getTime();
+    const endMs   = startMs + contest.duration_minutes * 60 * 1000;
+    const time_remaining_seconds = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
+
+    res.json({
+      ...base,
+      problems,
       user_score,
       user_rank,
       time_remaining_seconds,
@@ -165,12 +225,17 @@ const joinContest = async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, password_hash FROM contests WHERE id = $1`,
+      `SELECT id, password_hash, is_ended, start_time, duration_minutes
+         FROM contests WHERE id = $1`,
       [id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Contest not found' });
 
     const contest = rows[0];
+
+    if (getContestState(contest) === 'ended') {
+      return res.status(400).json({ error: 'Contest has already ended.' });
+    }
 
     const { rows: existing } = await pool.query(
       `SELECT 1 FROM contest_participants WHERE contest_id = $1 AND user_id = $2`,

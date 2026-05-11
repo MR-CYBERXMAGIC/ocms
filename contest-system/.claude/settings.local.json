@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\('./controllers/contestController.js'\\); console.log\\('contestController OK'\\);\")",
+      "Bash(node -e \"require\\('./controllers/authController.js'\\); console.log\\('authController OK'\\);\")",
+      "Bash(node -e \"require\\('./routes/auth.js'\\); console.log\\('routes/auth OK'\\);\")",
+      "Bash(node server.js)",
+      "Bash(curl -s http://localhost:3000/api/health)",
+      "Bash(curl *)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000/api/contests\" -UseBasicParsing | Select-Object -ExpandProperty Content)",
+      "PowerShell(Start-Process -FilePath \"node\" -ArgumentList \"server.js\" -WorkingDirectory \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Desktop\\\\ocms\\\\contest-system\" -WindowStyle Hidden; Start-Sleep -Seconds 3; Invoke-WebRequest -Uri \"http://localhost:3000/api/health\" -UseBasicParsing | Select-Object -ExpandProperty Content)",
+      "PowerShell(Invoke-WebRequest -Uri \"http://localhost:3000/api/users\" -UseBasicParsing)",
+      "Bash(node -e \"require\\('csv-parse/sync'\\)\")",
+      "Bash(npm install *)",
+      "Bash(node -e ' *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell($env:PGPASSWORD = \"9475\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -U postgres -d contest_db -f \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Desktop\\\\ocms\\\\contest-system\\\\db\\\\phase9_migration.sql\" 2>&1)"
+    ]
+  }
+}

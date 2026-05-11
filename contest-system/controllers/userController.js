@@ -26,7 +26,7 @@ const getUsers = async (req, res) => {
            OR u.full_name ILIKE '%' || $1 || '%'
            OR u.username  ILIKE '%' || $1 || '%'
         GROUP BY u.id, u.full_name, u.username, u.last_seen, u.is_online
-        ORDER BY problems_solved DESC, u.is_online DESC, u.username ASC`,
+        ORDER BY u.is_online DESC, problems_solved DESC, u.username ASC`,
       [search]
     );
     res.json({ users: rows });

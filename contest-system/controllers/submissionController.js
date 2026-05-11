@@ -1,7 +1,7 @@
 const pool = require('../db/pool');
-const { runOnOneCompiler, judgeCustomProblem, judgeExternalProblem, LANG_MAP } = require('../services/judge');
+const { runOnOneCompiler, judgeSubmission, LANGUAGE_MAP } = require('../services/judge');
 
-const VALID_LANGUAGES = Object.keys(LANG_MAP);
+const VALID_LANGUAGES = Object.keys(LANGUAGE_MAP);
 
 // POST /api/contests/:id/problems/:problemId/submit
 const submitSolution = async (req, res) => {
@@ -18,23 +18,21 @@ const submitSolution = async (req, res) => {
   }
 
   try {
-    // Validate contest is currently running
     const { rows: cRows } = await pool.query(
       `SELECT id, start_time, duration_minutes, is_ended FROM contests WHERE id = $1`,
       [contestId]
     );
     if (!cRows.length) return res.status(404).json({ error: 'Contest not found' });
 
-    const contest  = cRows[0];
-    const now      = Date.now();
-    const startMs  = new Date(contest.start_time).getTime();
-    const endMs    = startMs + contest.duration_minutes * 60 * 1000;
+    const contest = cRows[0];
+    const now     = Date.now();
+    const startMs = new Date(contest.start_time).getTime();
+    const endMs   = startMs + contest.duration_minutes * 60 * 1000;
 
     if (contest.is_ended || now < startMs || now > endMs) {
       return res.status(400).json({ error: 'Contest is not currently running' });
     }
 
-    // Validate participation
     const { rows: partRows } = await pool.query(
       `SELECT 1 FROM contest_participants WHERE contest_id = $1 AND user_id = $2`,
       [contestId, userId]
@@ -43,7 +41,6 @@ const submitSolution = async (req, res) => {
       return res.status(403).json({ error: 'You must join the contest before submitting' });
     }
 
-    // Validate problem belongs to this contest
     const { rows: pRows } = await pool.query(
       `SELECT p.id, p.type, p.source_url, p.platform
        FROM problems p
@@ -55,7 +52,6 @@ const submitSolution = async (req, res) => {
 
     const problem = pRows[0];
 
-    // Insert pending submission immediately so client can poll this ID
     const { rows: subRows } = await pool.query(
       `INSERT INTO submissions (user_id, contest_id, problem_id, language, code, verdict)
        VALUES ($1, $2, $3, $4, $5, 'Pending')
@@ -66,7 +62,7 @@ const submitSolution = async (req, res) => {
 
     res.status(202).json({ submission_id: submissionId });
 
-    // Run judging in background — response already sent above
+    // Judge in background — response already sent
     judgeInBackground(submissionId, userId, parseInt(contestId), parseInt(problemId), language, code, problem);
   } catch (err) {
     console.error('submitSolution error:', err.message);
@@ -76,45 +72,30 @@ const submitSolution = async (req, res) => {
 
 async function judgeInBackground(submissionId, userId, contestId, problemId, language, code, problem) {
   try {
-    let verdict, execution_time_ms;
-
     if (problem.type === 'custom') {
-      const r = await judgeCustomProblem(code, language, problemId);
-      verdict          = r.verdict;
-      execution_time_ms = r.execution_time_ms;
-    } else {
-      const r = await judgeExternalProblem(code, language, problem.source_url, problem.platform);
-      verdict          = r.verdict;
-      execution_time_ms = r.execution_time_ms;
+      const verdict = await judgeSubmission(pool, submissionId, problemId, code, language);
+      if (verdict === 'Accepted') {
+        await updateStreak(userId);
+      }
     }
-
-    // Update verdict on the placeholder submission (UPDATE, not INSERT, to preserve the ID for polling)
-    await pool.query(
-      `UPDATE submissions SET verdict = $1, execution_time_ms = $2 WHERE id = $3`,
-      [verdict, execution_time_ms, submissionId]
-    );
-
-    if (verdict === 'Accepted' && contestId) {
-      await updateStreakAndScore(userId, contestId, problemId, submissionId);
-    }
+    // External problems stay as 'Pending' — no auto-judging
   } catch (err) {
     console.error(`[Judge] Background error for submission ${submissionId}:`, err.message);
     await pool.query(
-      `UPDATE submissions SET verdict = 'Runtime Error' WHERE id = $1 AND verdict = 'Pending'`,
+      `UPDATE submissions SET verdict = 'Runtime Error'
+       WHERE id = $1 AND verdict IN ('Pending', 'In Progress')`,
       [submissionId]
     ).catch(() => {});
   }
 }
 
-async function updateStreakAndScore(userId, contestId, problemId, submissionId) {
-  // Streak: mirror the trigger logic (which only fires on INSERT, not UPDATE)
+async function updateStreak(userId) {
   await pool.query(
     `INSERT INTO user_daily_activity (user_id, activity_date)
      VALUES ($1, CURRENT_DATE) ON CONFLICT DO NOTHING`,
     [userId]
   );
 
-  // Walk backwards through consecutive active days
   let streak = 1;
   const checkDate = new Date();
   checkDate.setDate(checkDate.getDate() - 1);
@@ -131,44 +112,10 @@ async function updateStreakAndScore(userId, contestId, problemId, submissionId) 
 
   await pool.query(
     `UPDATE users
-     SET current_streak = $1, longest_streak = GREATEST(longest_streak, $1)
+     SET current_streak  = $1,
+         longest_streak  = GREATEST(longest_streak, $1)
      WHERE id = $2`,
     [streak, userId]
-  );
-
-  // Contest scoring: mirror submit_and_score() procedure logic
-  const { rows: priorAc } = await pool.query(
-    `SELECT 1 FROM submissions
-     WHERE user_id = $1 AND contest_id = $2 AND problem_id = $3
-       AND verdict = 'Accepted' AND id <> $4`,
-    [userId, contestId, problemId, submissionId]
-  );
-  if (priorAc.length) return; // Already solved — don't double-count
-
-  const { rows: cRows } = await pool.query(
-    `SELECT start_time FROM contests WHERE id = $1`,
-    [contestId]
-  );
-  if (!cRows.length) return;
-
-  const { rows: waRows } = await pool.query(
-    `SELECT COUNT(*)::INT AS cnt FROM submissions
-     WHERE user_id = $1 AND contest_id = $2 AND problem_id = $3
-       AND verdict = 'Wrong Answer' AND id <> $4`,
-    [userId, contestId, problemId, submissionId]
-  );
-
-  const startMs   = new Date(cRows[0].start_time).getTime();
-  const acMinutes = Math.floor((Date.now() - startMs) / 60000);
-  const penalty   = acMinutes + waRows[0].cnt * 20;
-
-  await pool.query(
-    `INSERT INTO contest_scores (contest_id, user_id, solved, penalty)
-     VALUES ($1, $2, 1, $3)
-     ON CONFLICT (contest_id, user_id) DO UPDATE
-       SET solved  = contest_scores.solved  + 1,
-           penalty = contest_scores.penalty + EXCLUDED.penalty`,
-    [contestId, userId, penalty]
   );
 }
 
@@ -220,15 +167,15 @@ const getSubmission = async (req, res) => {
 
     res.json({
       submission: {
-        id:               sub.id,
-        user_id:          sub.user_id,
-        contest_id:       sub.contest_id,
-        problem_id:       sub.problem_id,
-        language:         sub.language,
-        verdict:          sub.verdict,
+        id:                sub.id,
+        user_id:           sub.user_id,
+        contest_id:        sub.contest_id,
+        problem_id:        sub.problem_id,
+        language:          sub.language,
+        verdict:           sub.verdict,
         execution_time_ms: sub.execution_time_ms,
-        submitted_at:     sub.submitted_at,
-        code:             isOwner || isManager ? sub.code : null,
+        submitted_at:      sub.submitted_at,
+        code:              (isOwner || isManager) ? sub.code : null,
       },
     });
   } catch (err) {
@@ -237,7 +184,7 @@ const getSubmission = async (req, res) => {
   }
 };
 
-// GET /api/submissions/:submissionId/status  (polling endpoint — no auth required)
+// GET /api/submissions/:submissionId/status  (polling — no auth required)
 const getSubmissionStatus = async (req, res) => {
   const { submissionId } = req.params;
   try {
@@ -253,7 +200,7 @@ const getSubmissionStatus = async (req, res) => {
   }
 };
 
-// POST /api/run — proxy to OneCompiler (used by the Run button on problem page)
+// POST /api/run — proxy to OneCompiler (used by the Run button)
 const runCode = async (req, res) => {
   const { language, code, stdin } = req.body;
   if (!language || !code) {

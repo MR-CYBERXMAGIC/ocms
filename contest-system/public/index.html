@@ -5,6 +5,42 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — Contest System</title>
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-box {
+      background: #fff;
+      border-radius: 10px;
+      padding: 2rem;
+      width: 90%;
+      max-width: 440px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+    }
+    .modal-box h3 { margin: 0 0 1.25rem; font-size: 1.2rem; }
+    .modal-box p  { margin: 0 0 .6rem; color: #555; font-size: .95rem; }
+    .modal-warning { font-weight: 700; color: #c0392b !important; font-size: 1rem; }
+    .modal-actions { display: flex; gap: .75rem; margin-top: 1.5rem; justify-content: flex-end; }
+    .modal-error { color: #c0392b; font-size: .875rem; margin-bottom: .75rem; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid #ccc;
+      color: #444;
+      padding: .45rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: .875rem;
+    }
+    .btn-ghost:hover { background: #f0f0f0; }
+    .profile-actions { display: flex; gap: .75rem; margin-bottom: 1.5rem; }
+  </style>
 </head>
 <body>
 <div class="layout">
@@ -38,6 +74,11 @@
       <div class="page-header">
         <h2>My Dashboard</h2>
         <p id="page-subtitle">Your performance at a glance</p>
+      </div>
+
+      <div class="profile-actions">
+        <button onclick="openEditModal()" class="btn btn-sm">Edit Profile</button>
+        <button onclick="openDeleteModal()" class="btn btn-danger btn-sm">Delete Account</button>
       </div>
 
       <!-- Stats row -->
@@ -119,11 +160,130 @@
   </main>
 </div>
 
+<!-- Edit Profile Modal -->
+<div id="edit-modal" class="modal-overlay" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal-box">
+    <h3>Edit Profile</h3>
+    <div id="edit-error" class="modal-error hidden"></div>
+    <div class="form-group">
+      <label class="form-label">Full Name</label>
+      <input type="text" id="edit-full-name" class="form-input">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" id="edit-email" class="form-input">
+    </div>
+    <div class="form-group">
+      <label class="form-label">New Password</label>
+      <input type="password" id="edit-password" class="form-input"
+             placeholder="Leave blank to keep current password">
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeEditModal()" class="btn-ghost">Cancel</button>
+      <button onclick="saveProfile()" class="btn">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Account Modal -->
+<div id="delete-modal" class="modal-overlay" onclick="if(event.target===this)closeDeleteModal()">
+  <div class="modal-box">
+    <h3>Delete Account</h3>
+    <p class="modal-warning">YOU DELETE CAVE. NO COME BACK.</p>
+    <p>This will permanently erase your account, submissions, and contest history. There is no undo.</p>
+    <div id="delete-error" class="modal-error hidden"></div>
+    <div class="modal-actions">
+      <button onclick="closeDeleteModal()" class="btn-ghost">Cancel</button>
+      <button onclick="confirmDelete()" class="btn btn-danger">Yes, Delete My Account</button>
+    </div>
+  </div>
+</div>
+
 <script src="/js/api.js"></script>
 <script>
+  let currentUser = null;
+
   async function doLogout() {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     window.location.href = '/login.html';
+  }
+
+  // ── Edit Profile Modal ──────────────────────────────────────────────────
+  function openEditModal() {
+    if (!currentUser) return;
+    document.getElementById('edit-full-name').value = currentUser.full_name || '';
+    document.getElementById('edit-email').value     = currentUser.email     || '';
+    document.getElementById('edit-password').value  = '';
+    const errEl = document.getElementById('edit-error');
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+    document.getElementById('edit-modal').classList.add('active');
+  }
+
+  function closeEditModal() {
+    document.getElementById('edit-modal').classList.remove('active');
+  }
+
+  async function saveProfile() {
+    const full_name = document.getElementById('edit-full-name').value.trim();
+    const email     = document.getElementById('edit-email').value.trim();
+    const password  = document.getElementById('edit-password').value;
+    const errEl     = document.getElementById('edit-error');
+
+    if (!full_name) {
+      errEl.textContent = 'Full name cannot be empty.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    if (!email) {
+      errEl.textContent = 'Email cannot be empty.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+
+    const body = { full_name, email };
+    if (password) body.password = password;
+
+    try {
+      const data = await apiFetch('/auth/me', { method: 'PATCH', body });
+      if (!data) return;
+      currentUser = data.user;
+      document.getElementById('page-subtitle').textContent =
+        `Welcome back, ${escHtml(data.user.full_name)}`;
+      closeEditModal();
+    } catch (err) {
+      errEl.textContent = err.message || 'Update failed.';
+      errEl.classList.remove('hidden');
+    }
+  }
+
+  // ── Delete Account Modal ────────────────────────────────────────────────
+  function openDeleteModal() {
+    const errEl = document.getElementById('delete-error');
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+    document.getElementById('delete-modal').classList.add('active');
+  }
+
+  function closeDeleteModal() {
+    document.getElementById('delete-modal').classList.remove('active');
+  }
+
+  async function confirmDelete() {
+    const errEl = document.getElementById('delete-error');
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+    try {
+      const data = await apiFetch('/auth/me', { method: 'DELETE' });
+      if (!data) return;
+      window.location.href = '/login.html';
+    } catch (err) {
+      errEl.textContent = err.message || 'Delete failed.';
+      errEl.classList.remove('hidden');
+    }
   }
 
   async function init() {
@@ -132,6 +292,7 @@
       const authData = await apiFetch('/auth/me');
       if (!authData) return;
 
+      currentUser = authData.user;
       document.getElementById('nav-username').textContent = authData.user.username;
 
       const p = await apiFetch('/profile/me');

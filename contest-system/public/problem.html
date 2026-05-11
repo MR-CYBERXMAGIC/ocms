@@ -181,6 +181,28 @@
       font-family: 'SF Mono', Consolas, 'Courier New', monospace;
       line-height: 1.5;
     }
+    .CodeMirror-gutters { z-index: 4 !important; }
+    .CodeMirror-scroll  { padding-left: 2px; }
+
+    .hint-detail {
+      margin-bottom: 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+    }
+    .hint-detail summary {
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--accent);
+      user-select: none;
+    }
+    .hint-detail > p {
+      margin: 0.5rem 0 0;
+      font-size: 0.875rem;
+      white-space: pre-wrap;
+      line-height: 1.7;
+    }
 
     .action-row {
       flex-shrink: 0;
@@ -322,12 +344,22 @@
 
     <div id="content" class="hidden">
 
-      <!-- Top bar: back link + problem identity -->
+      <!-- Contest-ended banner -->
+      <div id="contest-ended-banner" class="hidden"
+           style="background:#fee2e2;border:1px solid #ef4444;border-radius:8px;
+                  padding:0.6rem 1rem;margin-bottom:0.6rem;font-weight:600;color:#991b1b;">
+        Contest has ended. Submissions are now closed.
+      </div>
+
+      <!-- Top bar: back link + problem identity + timer -->
       <div class="problem-topbar">
         <a id="back-link" href="#" style="font-size:0.875rem;color:var(--text-muted);flex-shrink:0;">← Back</a>
         <span class="label-circle" id="problem-label"></span>
         <strong id="problem-title" style="font-size:1rem;"></strong>
         <span id="type-badge" class="badge"></span>
+        <span id="timer"
+              style="margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums;
+                     font-size:0.875rem;font-family:'SF Mono',Consolas,monospace;"></span>
       </div>
 
       <!-- Two panels -->
@@ -343,10 +375,12 @@
           <div class="editor-controls">
             <label for="lang-select" style="font-size:0.8rem;font-weight:600;flex-shrink:0;">Language</label>
             <select id="lang-select" class="lang-select" onchange="onLangChange()">
-              <option value="C++17">C++17</option>
-              <option value="Python 3">Python 3</option>
-              <option value="Java">Java</option>
-              <option value="C">C</option>
+              <option value="cpp">C++17</option>
+              <option value="python">Python 3</option>
+              <option value="java">Java</option>
+              <option value="c">C</option>
+              <option value="javascript">JavaScript</option>
+              <option value="kotlin">Kotlin</option>
             </select>
           </div>
 
@@ -401,7 +435,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
 
+<script src="/js/toast.js"></script>
 <script src="/js/api.js"></script>
 <script>
 // ================================================================
@@ -413,39 +449,46 @@ const problemId = params.get('problemId');
 if (!contestId || !problemId) { location.href = '/contests.html'; }
 
 const CM_MODES = {
-  'C++17':    'text/x-c++src',
-  'Python 3': 'text/x-python',
-  'Java':     'text/x-java',
-  'C':        'text/x-csrc',
+  'cpp':        'text/x-c++src',
+  'c':          'text/x-csrc',
+  'python':     'text/x-python',
+  'java':       'text/x-java',
+  'javascript': 'text/javascript',
+  'kotlin':     'text/x-kotlin',
 };
 
 const STARTERS = {
-  'C++17':    '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}\n',
-  'Python 3': '# Write your solution here\n',
-  'Java':     'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        \n    }\n}\n',
-  'C':        '#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}\n',
+  'cpp':        '#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}\n',
+  'c':          '#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}\n',
+  'python':     '# Write your solution here\n',
+  'java':       'import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        \n    }\n}\n',
+  'javascript': '// Write your solution here\nprocess.stdin.resume();\nprocess.stdin.setEncoding("utf8");\n',
+  'kotlin':     'fun main() {\n    \n}\n',
 };
 
 let editor;
-let sampleTestCases = [];
-let isCustom        = false;
+let sampleTestCases   = [];
+let isCustom          = false;
 
-let verdictPollTimer  = null;   // setTimeout handle — polls status after submit
-let tablePollTimer    = null;   // setInterval handle — refreshes submissions table
+let verdictPollTimer  = null;
+let tablePollTimer    = null;
+let timerInterval     = null;
+let statusPollInterval = null;
 
 // ================================================================
 // Init
 // ================================================================
 async function init() {
   editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
-    mode:           CM_MODES['C++17'],
+    mode:           CM_MODES['cpp'],
     lineNumbers:    true,
+    gutters:        ['CodeMirror-linenumbers'],
     indentUnit:     4,
     tabSize:        4,
     indentWithTabs: false,
     autofocus:      false,
   });
-  editor.setValue(STARTERS['C++17']);
+  editor.setValue(STARTERS['cpp']);
 
   // Auth (non-fatal — problem page is viewable even if session expired for reading)
   try {
@@ -471,14 +514,22 @@ async function init() {
       typeBadge.className   = 'badge badge-progress';
     } else {
       typeBadge.textContent = p.platform || 'External';
-      typeBadge.className   = 'badge badge-pending';
+      typeBadge.className   = 'badge';
+      const platformColors = {
+        'CSES':       '#2563eb',
+        'CodeChef':   '#7c3aed',
+        'HackerRank': '#059669',
+        'USACO':      '#b45309',
+      };
+      const pColor = platformColors[p.platform] || '#6b7280';
+      typeBadge.style.cssText = `background:${pColor};color:#fff;border:none;`;
       // Disable Run for external problems
       const btnRun = document.getElementById('btn-run');
       btnRun.disabled = true;
       btnRun.title    = 'Run is unavailable for external problems';
     }
 
-    sampleTestCases = (isCustom && p.sample_test_cases) ? p.sample_test_cases : [];
+    sampleTestCases = p.sample_cases || [];
     renderProblemBody(p);
 
     document.getElementById('loading').classList.add('hidden');
@@ -486,6 +537,22 @@ async function init() {
 
     // Load submissions and start polling if any are pending
     await loadSubmissions();
+
+    // Fetch contest timing and start countdown
+    try {
+      const cResp = await fetch(`/api/contests/${contestId}`, { credentials: 'include' });
+      const c     = await cResp.json();
+      if (c.is_ended || c.contest_state === 'ended') {
+        showEndedBanner();
+      } else if (c.time_remaining_seconds > 0) {
+        const endMs = Date.now() + c.time_remaining_seconds * 1000;
+        startTimer(endMs);
+        statusPollInterval = setInterval(checkContestStatus, 30000);
+      } else {
+        showEndedBanner();
+      }
+    } catch (_) {}
+
   } catch (err) {
     document.getElementById('loading').textContent = 'Failed to load problem.';
     console.error(err);
@@ -499,28 +566,66 @@ function renderProblemBody(p) {
   const body = document.getElementById('problem-body');
 
   if (!isCustom) {
-    body.innerHTML = `
-      <div class="external-notice">
-        This problem is hosted on <strong>${escHtml(p.platform || 'an external platform')}</strong>.
-        Read the statement on the platform, then submit your code below.
-        Verdict will remain <em>Pending</em> — judging is done manually on the platform.
-      </div>
-      <a href="${escHtml(p.source_url || '#')}" target="_blank" rel="noopener" class="ext-link">
-        🔗&nbsp; ${escHtml(p.title)}
-        <span style="font-size:0.75rem;color:var(--text-muted);margin-left:auto;">${escHtml(p.source_url || '')}</span>
+    // External problem — show fetched content or fallback
+    if (p.fetch_status === 'failed' || !p.statement) {
+      body.innerHTML = `
+        <div style="padding:16px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;margin-bottom:1rem;">
+          ⚠ Problem preview unavailable — content could not be fetched from
+          <strong>${escHtml(p.platform || 'external platform')}</strong>.
+          <br><a href="${escHtml(p.source_url || '#')}" target="_blank" style="color:#b45309;font-weight:600;">
+            View on ${escHtml(p.platform || 'platform')} ↗
+          </a>
+        </div>
+      `;
+      return;
+    }
+
+    // Content fetched — render natively
+    let html = '';
+    html += `<div class="limits-row">
+      <span>⏱ Time: <strong>${p.time_limit_ms ? (p.time_limit_ms / 1000) + 's' : '—'}</strong></span>
+      <span>💾 Memory: <strong>${p.memory_limit_mb ? p.memory_limit_mb + ' MB' : '—'}</strong></span>
+    </div>`;
+
+    if (p.constraints_text) html += probSection('Constraints', p.constraints_text);
+
+    // statement is HTML from scraper — do NOT escape
+    html += `<div class="prob-section"><h4>Problem Statement</h4>
+      <div class="content" style="white-space:normal;">${p.statement}</div></div>`;
+
+    const samples = p.sample_cases || [];
+    html += `<div class="prob-section"><h4>Sample Test Cases</h4>`;
+    if (samples.length === 0) {
+      html += `<p style="font-size:0.875rem;color:var(--text-muted);">No sample cases available.</p>`;
+    } else {
+      samples.forEach((sc, i) => {
+        html += `
+          <div style="font-size:0.72rem;font-weight:600;color:var(--text-muted);margin-bottom:0.25rem;">Example ${i + 1}</div>
+          <div class="test-case-block">
+            <div class="tc-pane"><label>Input</label><pre>${escHtml(sc.input)}</pre></div>
+            <div class="tc-pane"><label>Expected Output</label><pre>${escHtml(sc.expected_output || '')}</pre></div>
+          </div>`;
+      });
+    }
+    html += `</div>`;
+
+    html += `<div class="prob-section" style="margin-top:0.5rem;">
+      <a href="${escHtml(p.source_url || '#')}" target="_blank" rel="noopener"
+         style="font-size:0.8rem;color:var(--text-muted);">
+        View original on ${escHtml(p.platform)} ↗
       </a>
-    `;
+    </div>`;
+
+    body.innerHTML = html;
     return;
   }
 
+  // Custom problem
   let html = '';
-
-  html += `
-    <div class="limits-row">
-      <span>⏱ Time: <strong>${p.time_limit_ms} ms</strong></span>
-      <span>💾 Memory: <strong>${p.memory_limit_mb} MB</strong></span>
-    </div>
-  `;
+  html += `<div class="limits-row">
+    <span>⏱ Time: <strong>${p.time_limit_ms} ms</strong></span>
+    <span>💾 Memory: <strong>${p.memory_limit_mb} MB</strong></span>
+  </div>`;
 
   html += probSection('Problem Statement', p.statement, 'problem-statement');
 
@@ -533,34 +638,33 @@ function renderProblemBody(p) {
 
   if (p.constraints_text) html += probSection('Constraints', p.constraints_text);
 
-  // Sample test cases
-  if (p.sample_test_cases && p.sample_test_cases.length) {
-    html += `<div class="prob-section"><h4>Sample Test Cases</h4>`;
-    p.sample_test_cases.forEach((tc, i) => {
+  const samples = p.sample_cases || [];
+  html += `<div class="prob-section"><h4>Sample Test Cases</h4>`;
+  if (samples.length === 0) {
+    html += `<p style="font-size:0.875rem;color:var(--text-muted);">No sample test cases provided.</p>`;
+  } else {
+    samples.forEach((tc, i) => {
       html += `
         <div style="font-size:0.72rem;font-weight:600;color:var(--text-muted);margin-bottom:0.25rem;">Example ${i + 1}</div>
         <div class="test-case-block">
           <div class="tc-pane"><label>Input</label><pre>${escHtml(tc.input)}</pre></div>
-          <div class="tc-pane"><label>Expected Output</label><pre>${escHtml(tc.expected_output)}</pre></div>
-        </div>
-      `;
+          <div class="tc-pane"><label>Expected Output</label><pre>${escHtml(tc.expected_output || '')}</pre></div>
+        </div>`;
+    });
+  }
+  html += `</div>`;
+
+  // Hints — each as a collapsible <details> block
+  const hints = Array.isArray(p.hints) ? p.hints : [];
+  if (hints.length > 0) {
+    html += `<div class="prob-section"><h4>Hints</h4>`;
+    hints.forEach((h, i) => {
+      html += `<details class="hint-detail">
+        <summary>Hint ${i + 1}</summary>
+        <p>${escHtml(h)}</p>
+      </details>`;
     });
     html += `</div>`;
-  } else {
-    html += `<div class="prob-section"><h4>Sample Test Cases</h4>
-      <p style="font-size:0.875rem;color:var(--text-muted);">No sample test cases provided.</p></div>`;
-  }
-
-  // Hints (collapsed by default)
-  if (p.hints) {
-    html += `
-      <div class="prob-section">
-        <button class="hints-toggle" id="hints-toggle" onclick="toggleHints()">💡 Show Hints ▾</button>
-        <div id="hints-body" class="hidden" style="margin-top:0.6rem;font-size:0.875rem;white-space:pre-wrap;line-height:1.7;">
-          ${escHtml(p.hints)}
-        </div>
-      </div>
-    `;
   }
 
   body.innerHTML = html;
@@ -575,22 +679,62 @@ function probSectionInner(title, content) {
     <h4>${escHtml(title)}</h4><div class="content">${escHtml(content)}</div></div>`;
 }
 
-function toggleHints() {
-  const body = document.getElementById('hints-body');
-  const btn  = document.getElementById('hints-toggle');
-  const hidden = body.classList.toggle('hidden');
-  btn.textContent = hidden ? '💡 Show Hints ▾' : '💡 Hide Hints ▴';
-}
-
 // ================================================================
 // Language switch
 // ================================================================
 function onLangChange() {
   const lang = document.getElementById('lang-select').value;
   editor.setOption('mode', CM_MODES[lang] || 'text/plain');
+  // Only inject starter if editor is empty — never clear existing code
   if (!editor.getValue().trim()) {
     editor.setValue(STARTERS[lang] || '');
   }
+  editor.focus();
+}
+
+// ================================================================
+// Contest timer + early-end detection
+// ================================================================
+function startTimer(endTime) {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    const remaining = new Date(endTime) - Date.now();
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      showEndedBanner();
+      return;
+    }
+    const h = Math.floor(remaining / 3600000);
+    const m = Math.floor((remaining % 3600000) / 60000);
+    const s = Math.floor((remaining % 60000) / 1000);
+    const timerEl = document.getElementById('timer');
+    if (timerEl) {
+      timerEl.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      timerEl.style.color = remaining < 300000 ? '#ef4444' : '';
+    }
+  }, 1000);
+}
+
+async function checkContestStatus() {
+  try {
+    const resp = await fetch(`/api/contests/${contestId}`, { credentials: 'include' });
+    const data = await resp.json();
+    if (data.is_ended || data.contest_state === 'ended') {
+      if (timerInterval)      { clearInterval(timerInterval);      timerInterval = null; }
+      if (statusPollInterval) { clearInterval(statusPollInterval); statusPollInterval = null; }
+      showEndedBanner();
+    }
+  } catch (_) {}
+}
+
+function showEndedBanner() {
+  const banner = document.getElementById('contest-ended-banner');
+  if (banner) banner.classList.remove('hidden');
+  const btn = document.getElementById('btn-submit');
+  if (btn) { btn.disabled = true; btn.textContent = 'Contest Ended'; }
+  const timerEl = document.getElementById('timer');
+  if (timerEl) { timerEl.textContent = 'Ended'; timerEl.style.color = '#ef4444'; }
 }
 
 // ================================================================

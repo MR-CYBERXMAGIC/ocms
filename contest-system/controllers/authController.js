@@ -109,4 +109,74 @@ const me = async (req, res) => {
   }
 };
 
-module.exports = { register, login, logout, me };
+// PATCH /api/auth/me
+const updateMe = async (req, res) => {
+  const userId = req.session.userId;
+  const { full_name, email, password } = req.body;
+
+  try {
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    if (full_name !== undefined) {
+      if (!full_name.trim()) return res.status(400).json({ error: 'Full name cannot be empty' });
+      fields.push(`full_name = $${idx++}`);
+      values.push(full_name.trim());
+    }
+
+    if (email !== undefined) {
+      if (!email.trim()) return res.status(400).json({ error: 'Email cannot be empty' });
+      fields.push(`email = $${idx++}`);
+      values.push(email.trim().toLowerCase());
+    }
+
+    if (password) {
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      }
+      const hash = await bcrypt.hash(password, SALT_ROUNDS);
+      fields.push(`password_hash = $${idx++}`);
+      values.push(hash);
+    }
+
+    if (!fields.length) return res.status(400).json({ error: 'Nothing to update' });
+
+    values.push(userId);
+    const { rows } = await pool.query(
+      `UPDATE users
+          SET ${fields.join(', ')}
+        WHERE id = $${idx}
+        RETURNING id, full_name, username, email,
+                  last_seen, is_online, current_streak, longest_streak, created_at`,
+      values
+    );
+
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    res.json({ user: rows[0] });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Email already in use by another account' });
+    }
+    console.error('updateMe error:', err.message);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+};
+
+// DELETE /api/auth/me
+const deleteMe = async (req, res) => {
+  const userId = req.session.userId;
+  try {
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+    req.session.destroy((err) => {
+      if (err) console.error('Session destroy error after delete:', err.message);
+      res.clearCookie('connect.sid');
+      res.json({ message: 'Account deleted successfully' });
+    });
+  } catch (err) {
+    console.error('deleteMe error:', err.message);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+};
+
+module.exports = { register, login, logout, me, updateMe, deleteMe };

@@ -53,6 +53,49 @@
       display: flex;
       gap: 1.25rem;
     }
+    .filter-bar {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+    }
+    .filter-bar input {
+      flex: 1;
+      min-width: 180px;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.875rem;
+      background: var(--card-bg);
+      color: var(--text);
+    }
+    .filter-bar select {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.875rem;
+      background: var(--card-bg);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .filter-bar .btn-clear {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.875rem;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .filter-bar .btn-clear:hover { background: var(--border); }
+    #no-results {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -86,6 +129,16 @@
         <p>Running and upcoming programming contests</p>
       </div>
       <a href="/create-contest.html" class="btn btn-primary">+ Create Contest</a>
+    </div>
+
+    <div class="filter-bar">
+      <input type="text" id="search-input" placeholder="Search contests…" autocomplete="off">
+      <select id="status-filter">
+        <option value="all">All</option>
+        <option value="running">Running</option>
+        <option value="upcoming">Upcoming</option>
+      </select>
+      <button id="clear-btn" class="btn-clear" style="display:none;">✕ Clear</button>
     </div>
 
     <div id="loading" class="spinner">Loading contests…</div>
@@ -123,6 +176,24 @@
     return `${h}h ${m}m`;
   }
 
+  function filterContests() {
+    const query  = document.getElementById('search-input').value.toLowerCase();
+    const status = document.getElementById('status-filter').value;
+    const cards  = document.querySelectorAll('.contest-card');
+    let   visible = 0;
+
+    cards.forEach(card => {
+      const nameMatch   = card.dataset.name.toLowerCase().includes(query);
+      const statusMatch = status === 'all' || card.dataset.status === status;
+      const show        = nameMatch && statusMatch;
+      card.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    document.getElementById('no-results').style.display = visible === 0 ? 'block' : 'none';
+    document.getElementById('clear-btn').style.display  = query ? 'inline-block' : 'none';
+  }
+
   async function init() {
     try {
       const authData = await apiFetch('/auth/me');
@@ -140,26 +211,39 @@
       const grid = document.getElementById('contest-grid');
       grid.classList.remove('hidden');
       grid.innerHTML = data.contests.map(c => {
-        const isRunning = c.status === 'Running';
+        const isRunning = c.status === 'running';
+        const lockIcon  = c.is_password_protected ? ' 🔒' : '';
         return `
-          <a class="contest-card" href="/contest.html?id=${c.id}">
+          <a class="contest-card"
+             href="/contest.html?id=${c.id}"
+             data-name="${escHtml(c.name)}"
+             data-status="${c.status}">
             <div class="contest-card-header">
-              <div class="contest-card-title">${escHtml(c.name)}</div>
+              <div class="contest-card-title">${escHtml(c.name)}${lockIcon}</div>
               <span class="badge ${isRunning ? 'badge-running' : 'badge-upcoming'}">
-                ${isRunning ? '● Running' : '◎ Upcoming'}
+                ${isRunning ? '🟢 Running' : '🔵 Upcoming'}
               </span>
             </div>
             <div class="contest-meta">
               <div>📅 ${escHtml(fmtDateTime(c.start_time))}</div>
-              <div>⏱ ${escHtml(fmtDuration(c.duration_minutes))}</div>
-              <div class="contest-meta-row" style="margin-top:0.2rem;">
+              <div class="contest-meta-row" style="margin-top:0.3rem;">
+                <span>⏱ ${escHtml(fmtDuration(c.duration_minutes))}</span>
                 <span>📋 ${c.problem_count} problem${c.problem_count !== 1 ? 's' : ''}</span>
-                <span>👥 ${c.participant_count} participant${c.participant_count !== 1 ? 's' : ''}</span>
+                <span>👥 ${c.participant_count} registered</span>
               </div>
             </div>
           </a>
         `;
       }).join('');
+
+      // Wire up filter controls after cards are in the DOM
+      document.getElementById('search-input').addEventListener('input',  filterContests);
+      document.getElementById('status-filter').addEventListener('change', filterContests);
+      document.getElementById('clear-btn').addEventListener('click', () => {
+        document.getElementById('search-input').value = '';
+        document.getElementById('status-filter').value = 'all';
+        filterContests();
+      });
     } catch (err) {
       document.getElementById('loading').textContent = 'Failed to load contests.';
       console.error(err);
@@ -168,5 +252,7 @@
 
   init();
 </script>
+
+<p id="no-results">No contests found matching your search.</p>
 </body>
 </html>

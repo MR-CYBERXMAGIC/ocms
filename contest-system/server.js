@@ -4,8 +4,9 @@ const cors    = require('cors');
 const session = require('express-session');
 const path    = require('path');
 
-const pool             = require('./db/pool');
-const { setLastSeen }  = require('./middleware/auth');
+const pool                        = require('./db/pool');
+const { setLastSeen }             = require('./middleware/auth');
+const { validateAndFetchProblem } = require('./services/problemScraper');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -40,6 +41,21 @@ app.use('/api/profile',     require('./routes/profile'));
 app.use('/api/contests',    require('./routes/contests'));
 app.use('/api/submissions', require('./routes/submissions'));
 app.post('/api/run',        require('./controllers/submissionController').runCode);
+
+// ------------------------------------------------------------------
+// URL validation (used by create-contest page before contest exists)
+// ------------------------------------------------------------------
+app.get('/api/validate-url', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: 'url parameter is required' });
+  try {
+    const result = await validateAndFetchProblem(url);
+    if (!result.valid) return res.status(400).json({ error: result.error });
+    res.json({ platform: result.platform, title: result.title });
+  } catch (err) {
+    res.status(500).json({ error: 'Validation failed' });
+  }
+});
 
 // ------------------------------------------------------------------
 // Health check

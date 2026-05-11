@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Create Contest — Contest System</title>
   <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/toast.js"></script>
   <style>
     .step-panel { display: none; }
     .step-panel.active { display: block; }
@@ -227,8 +228,13 @@
                 </div>
               </div>
               <div class="form-group">
-                <label>Hints <span class="form-hint" style="font-weight:400;">(optional)</span></label>
-                <textarea id="cust-hints" class="form-control" rows="2"></textarea>
+                <label>Hints <span class="form-hint" style="font-weight:400;">(optional, max 5)</span></label>
+                <div id="hints-container" style="margin-bottom:0.4rem;"></div>
+                <button type="button" onclick="addHint()" id="add-hint-btn"
+                        class="btn btn-sm"
+                        style="background:var(--border);color:var(--text);font-size:0.8rem;">
+                  + Add Hint
+                </button>
               </div>
 
               <hr class="section-divider">
@@ -247,15 +253,22 @@
                             style="font-family:'SF Mono',Consolas,monospace;font-size:0.8rem;"></textarea>
                 </div>
               </div>
-              <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+              <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.5rem;flex-wrap:wrap;">
                 <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.875rem;cursor:pointer;">
                   <input type="checkbox" id="tc-hidden"> Hidden test case
                 </label>
                 <button onclick="addTestCase()" class="btn btn-sm" style="background:var(--border);color:var(--text);">
                   + Add Test Case
                 </button>
-                <label class="btn btn-sm" style="background:var(--border);color:var(--text);cursor:pointer;">
-                  Upload CSV
+              </div>
+              <div style="border:1px solid var(--border);border-radius:6px;padding:0.75rem;margin-bottom:0.75rem;background:var(--card-bg);">
+                <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);margin-bottom:0.5rem;">Bulk CSV Upload</div>
+                <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem;font-family:'SF Mono',Consolas,monospace;">
+                  Header: <code>is_hidden,input,expected_output</code><br>
+                  Use <code>\n</code> for newlines inside values.
+                </div>
+                <label class="btn btn-sm" style="background:var(--border);color:var(--text);cursor:pointer;display:inline-block;">
+                  Choose CSV…
                   <input type="file" id="tc-csv" accept=".csv" style="display:none;" onchange="handleCSVUpload(event)">
                 </label>
               </div>
@@ -309,17 +322,15 @@
 <script src="/js/api.js"></script>
 <script>
   // ── State ──────────────────────────────────────────────────
-  let step1Data     = {};
-  let pendingProblems = [];   // [{type, ...fields, test_cases?}]
-  let customTestCases = [];   // current custom problem's test cases
+  let step1Data       = {};
+  let pendingProblems = [];
+  let customTestCases = [];
 
   // ── Auth gate ──────────────────────────────────────────────
   (async () => {
     const authData = await apiFetch('/auth/me');
     if (!authData) return;
     document.getElementById('nav-username').textContent = authData.user.username;
-
-    // Set minimum start time to 5 min from now
     const minDate = new Date(Date.now() + 5 * 60 * 1000);
     document.getElementById('start-time').min = minDate.toISOString().slice(0, 16);
   })();
@@ -338,7 +349,7 @@
     const errEl    = document.getElementById('step1-err');
     errEl.classList.add('hidden');
 
-    if (!name) return showError(errEl, 'Contest name is required.');
+    if (!name)    return showError(errEl, 'Contest name is required.');
     if (!startRaw) return showError(errEl, 'Start time is required.');
     if (new Date(startRaw) <= new Date()) return showError(errEl, 'Start time must be in the future.');
     const durMins = hours * 60 + minutes;
@@ -375,24 +386,72 @@
     document.getElementById('tab-' + name).classList.add('active');
   }
 
-  // ── External problem ───────────────────────────────────────
-  function addExternalProblem() {
-    const platform   = document.getElementById('ext-platform').value;
+  // ── External problem — async URL validation ────────────────
+  async function addExternalProblem() {
     const source_url = document.getElementById('ext-url').value.trim();
-    const title      = document.getElementById('ext-title').value.trim();
     const errEl      = document.getElementById('ext-err');
+    const btn        = document.querySelector('#tab-external button.btn-primary');
     errEl.classList.add('hidden');
 
-    if (!platform) return showError(errEl, 'Please select a platform.');
-    if (!source_url) return showError(errEl, 'Problem URL is required.');
+    if (!source_url) return showError(errEl, 'Please enter a problem URL.');
 
-    pendingProblems.push({ type: 'external', platform, source_url, title: title || source_url });
-    renderProblemList();
+    // Local duplicate check
+    if (pendingProblems.some(p => p.source_url === source_url)) {
+      return showError(errEl, 'This URL is already in the problem list.');
+    }
 
-    // Reset form
-    document.getElementById('ext-platform').value = '';
-    document.getElementById('ext-url').value = '';
-    document.getElementById('ext-title').value = '';
+    btn.disabled    = true;
+    btn.textContent = 'Checking…';
+
+    try {
+      const data = await apiFetch(`/validate-url?url=${encodeURIComponent(source_url)}`);
+      if (!data) return;
+
+      pendingProblems.push({
+        type: 'external',
+        platform:   data.platform,
+        source_url,
+        title:      data.title,
+      });
+      renderProblemList();
+
+      // Keep platform selector visible; clear only the URL field
+      document.getElementById('ext-url').value = '';
+      showToast(`Added: ${data.title} (${data.platform})`, 'success');
+    } catch (err) {
+      showError(errEl, err.message || 'Invalid or unreachable URL.');
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = 'Add Problem';
+    }
+  }
+
+  // ── Hints (dynamic, max 5) ─────────────────────────────────
+  function addHint() {
+    const container = document.getElementById('hints-container');
+    const count     = container.querySelectorAll('.hint-row').length;
+    if (count >= 5) return;
+    const row = document.createElement('div');
+    row.className = 'hint-row';
+    row.style.cssText = 'display:flex;gap:0.5rem;margin-bottom:0.4rem;align-items:center;';
+    row.innerHTML = `
+      <input type="text" placeholder="Hint ${count + 1}" class="hint-input form-control"
+             style="flex:1;font-size:0.875rem;">
+      <button type="button" onclick="removeHint(this)"
+              class="btn btn-sm btn-danger"
+              style="padding:0.25rem 0.5rem;flex-shrink:0;">✕</button>
+    `;
+    container.appendChild(row);
+  }
+
+  function removeHint(btn) {
+    btn.parentElement.remove();
+  }
+
+  function getHints() {
+    return [...document.querySelectorAll('.hint-input')]
+      .map(i => i.value.trim())
+      .filter(v => v.length > 0);
   }
 
   // ── Custom problem ─────────────────────────────────────────
@@ -406,8 +465,8 @@
     document.getElementById('cust-err').classList.add('hidden');
     const is_hidden = document.getElementById('tc-hidden').checked;
     customTestCases.push({ input, expected_output: output, is_hidden });
-    document.getElementById('tc-input').value  = '';
-    document.getElementById('tc-output').value = '';
+    document.getElementById('tc-input').value    = '';
+    document.getElementById('tc-output').value   = '';
     document.getElementById('tc-hidden').checked = false;
     renderTestCaseList();
   }
@@ -421,7 +480,7 @@
     const list  = document.getElementById('tc-list');
     const empty = document.getElementById('tc-empty');
     if (!customTestCases.length) {
-      list.innerHTML = '';
+      list.innerHTML  = '';
       empty.style.display = '';
       return;
     }
@@ -430,7 +489,8 @@
       <div class="tc-row">
         <span class="badge ${tc.is_hidden ? 'badge-ce' : 'badge-ac'}">${tc.is_hidden ? 'Hidden' : 'Sample'}</span>
         <span class="tc-preview">${escHtml(tc.input.split('\n')[0])} → ${escHtml(tc.expected_output.split('\n')[0])}</span>
-        <button onclick="removeTestCase(${i})" class="btn btn-sm btn-danger" style="padding:0.2rem 0.5rem;font-size:0.7rem;">✕</button>
+        <button onclick="removeTestCase(${i})" class="btn btn-sm btn-danger"
+                style="padding:0.2rem 0.5rem;font-size:0.7rem;">✕</button>
       </div>
     `).join('');
   }
@@ -441,17 +501,38 @@
     const reader = new FileReader();
     reader.onload = e => {
       const rows = parseClientCSV(e.target.result);
-      const startIdx = rows.length > 0 && rows[0][0].toLowerCase() === 'input' ? 1 : 0;
+      if (!rows.length) return;
+
+      // Detect header row by checking for known column names
+      const firstRow  = rows[0].map(c => c.toLowerCase().trim());
+      const isHeader  = firstRow.some(c => ['is_hidden','input','expected_output'].includes(c));
+      let inputCol    = 0, outputCol = 1, hiddenCol = 2;
+      if (isHeader) {
+        const idx = col => { const i = firstRow.indexOf(col); return i === -1 ? null : i; };
+        inputCol  = idx('input')           ?? 0;
+        outputCol = idx('expected_output') ?? 1;
+        hiddenCol = idx('is_hidden')       ?? 2;
+      }
+
+      const startIdx = isHeader ? 1 : 0;
+      let added = 0;
       for (let r = startIdx; r < rows.length; r++) {
         const row = rows[r];
-        if (row.length < 3) continue;
-        const is_hidden = row[2].trim().toLowerCase() === 'true' || row[2].trim() === '1';
-        customTestCases.push({ input: row[0], expected_output: row[1], is_hidden });
+        if (row.length < 2) continue;
+        customTestCases.push({
+          input:           (row[inputCol]  || '').replace(/\\n/g, '\n'),
+          expected_output: (row[outputCol] || '').replace(/\\n/g, '\n'),
+          is_hidden:       hiddenCol < row.length
+                             ? row[hiddenCol].trim().toLowerCase() === 'true'
+                             : false,
+        });
+        added++;
       }
       renderTestCaseList();
+      if (added > 0) showToast(`${added} test case${added !== 1 ? 's' : ''} loaded from CSV.`, 'success');
     };
     reader.readAsText(file);
-    event.target.value = ''; // reset so same file can be re-uploaded
+    event.target.value = '';
   }
 
   function parseClientCSV(text) {
@@ -486,13 +567,19 @@
   }
 
   function addCustomProblem() {
-    const title       = document.getElementById('cust-title').value.trim();
-    const statement   = document.getElementById('cust-statement').value.trim();
-    const errEl       = document.getElementById('cust-err');
+    const title     = document.getElementById('cust-title').value.trim();
+    const statement = document.getElementById('cust-statement').value.trim();
+    const errEl     = document.getElementById('cust-err');
     errEl.classList.add('hidden');
 
     if (!title)     return showError(errEl, 'Title is required.');
     if (!statement) return showError(errEl, 'Statement is required.');
+
+    if (pendingProblems.some(p => p.title.toLowerCase() === title.toLowerCase())) {
+      return showError(errEl, 'A problem with this title is already in the list.');
+    }
+
+    const hints = getHints();
 
     pendingProblems.push({
       type:             'custom',
@@ -503,17 +590,17 @@
       constraints_text: document.getElementById('cust-constraints').value.trim() || null,
       time_limit_ms:    parseInt(document.getElementById('cust-tl').value)  || 1000,
       memory_limit_mb:  parseInt(document.getElementById('cust-ml').value)  || 256,
-      hints:            document.getElementById('cust-hints').value.trim()        || null,
+      hints:            hints.length ? hints : [],
       test_cases:       [...customTestCases],
     });
 
     renderProblemList();
+    showToast(`Problem "${title}" added.`, 'success');
 
     // Reset custom form
-    ['cust-title','cust-statement','cust-input-fmt','cust-output-fmt',
-     'cust-constraints','cust-hints'].forEach(id => {
-      document.getElementById(id).value = '';
-    });
+    ['cust-title','cust-statement','cust-input-fmt','cust-output-fmt','cust-constraints']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('hints-container').innerHTML = '';
     document.getElementById('cust-tl').value = '1000';
     document.getElementById('cust-ml').value = '256';
     customTestCases = [];
@@ -527,13 +614,13 @@
     document.getElementById('prob-count').textContent = pendingProblems.length;
 
     if (!pendingProblems.length) {
-      el.innerHTML = '';
+      el.innerHTML        = '';
       empty.style.display = '';
       return;
     }
     empty.style.display = 'none';
     el.innerHTML = pendingProblems.map((p, i) => {
-      const label  = String.fromCharCode(65 + i);
+      const label   = String.fromCharCode(65 + i);
       const typeTag = p.type === 'external'
         ? `<span class="badge badge-pending" style="font-size:0.65rem;">${escHtml(p.platform)}</span>`
         : `<span class="badge badge-progress" style="font-size:0.65rem;">Custom</span>`;
@@ -562,32 +649,28 @@
 
   // ── Submit contest ─────────────────────────────────────────
   async function submitContest() {
-    const btn     = document.getElementById('submit-btn');
-    const errEl   = document.getElementById('submit-err');
-    const succEl  = document.getElementById('submit-success');
+    const btn   = document.getElementById('submit-btn');
+    const errEl = document.getElementById('submit-err');
     errEl.classList.add('hidden');
-    succEl.classList.add('hidden');
+    document.getElementById('submit-success').classList.add('hidden');
 
-    btn.disabled = true;
+    btn.disabled    = true;
     btn.textContent = 'Creating…';
 
     try {
-      // 1. Create contest
       const created = await apiFetch('/contests', { method: 'POST', body: step1Data });
       if (!created) return;
       const contestId = created.id;
 
-      // 2. Add each problem
       for (const prob of pendingProblems) {
         await apiFetch(`/contests/${contestId}/problems`, { method: 'POST', body: prob });
       }
 
-      succEl.textContent = 'Contest created! Redirecting…';
-      succEl.classList.remove('hidden');
-      setTimeout(() => { window.location.href = `/contest.html?id=${contestId}`; }, 1000);
+      showToast(`Contest "${step1Data.name}" created successfully!`, 'success');
+      setTimeout(() => { window.location.href = `/manager.html?id=${contestId}`; }, 1500);
     } catch (err) {
       showError(errEl, err.message || 'Failed to create contest.');
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = 'Create Contest';
     }
   }
