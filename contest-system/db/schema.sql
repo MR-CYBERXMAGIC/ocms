@@ -51,15 +51,12 @@ CREATE TABLE IF NOT EXISTS contest_participants (
 
 -- ================================================================
 -- SECTION 4: PROBLEMS
--- type = 'custom'   → statement/test cases stored here
--- type = 'external' → problem lives on platform; source_url required
+-- All problems are custom — statement and test cases stored here.
 -- ================================================================
 CREATE TABLE IF NOT EXISTS problems (
   id                BIGSERIAL  PRIMARY KEY,
   title             TEXT       NOT NULL,
-  type              TEXT       NOT NULL CHECK (type IN ('custom', 'external')),
-  platform          TEXT,                    -- e.g. 'Codeforces', 'AtCoder'
-  source_url        TEXT,                    -- canonical problem URL
+  type              TEXT       NOT NULL DEFAULT 'custom' CHECK (type IN ('custom')),
   statement         TEXT,
   input_format      TEXT,
   output_format     TEXT,

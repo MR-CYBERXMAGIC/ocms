@@ -118,32 +118,6 @@
       font-weight: 600;
     }
 
-    .external-notice {
-      background: #ebf4ff;
-      border: 1px solid #bee3f8;
-      border-radius: 8px;
-      padding: 1rem 1.25rem;
-      margin-bottom: 1rem;
-      font-size: 0.875rem;
-      color: #2a4365;
-    }
-
-    .ext-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.6rem;
-      padding: 0.75rem 1.1rem;
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      text-decoration: none;
-      color: var(--text);
-      font-weight: 600;
-      margin-top: 0.5rem;
-      transition: border-color 0.15s;
-    }
-    .ext-link:hover { border-color: var(--accent); text-decoration: none; }
-
     /* ---- Right: editor + controls ---- */
     .panel-right {
       flex: 1 1 50%;
@@ -360,7 +334,6 @@
         <a id="back-link" href="#" style="font-size:0.875rem;color:var(--text-muted);flex-shrink:0;">← Back</a>
         <span class="label-circle" id="problem-label"></span>
         <strong id="problem-title" style="font-size:1rem;"></strong>
-        <span id="type-badge" class="badge"></span>
         <span id="timer"
               style="margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums;
                      font-size:0.875rem;font-family:'SF Mono',Consolas,monospace;"></span>
@@ -473,12 +446,12 @@ const STARTERS = {
 
 let editor;
 let sampleTestCases   = [];
-let isCustom          = false;
 
 let verdictPollTimer  = null;
 let tablePollTimer    = null;
 let timerInterval     = null;
 let statusPollInterval = null;
+let currentEndMs      = 0;
 
 // ================================================================
 // Init
@@ -517,28 +490,6 @@ async function init() {
     document.getElementById('problem-label').textContent = p.label;
     document.getElementById('problem-title').textContent = p.title;
 
-    isCustom = (p.type === 'custom');
-    const typeBadge = document.getElementById('type-badge');
-    if (isCustom) {
-      typeBadge.textContent = 'Custom';
-      typeBadge.className   = 'badge badge-progress';
-    } else {
-      typeBadge.textContent = p.platform || 'External';
-      typeBadge.className   = 'badge';
-      const platformColors = {
-        'CSES':       '#2563eb',
-        'CodeChef':   '#7c3aed',
-        'HackerRank': '#059669',
-        'USACO':      '#b45309',
-      };
-      const pColor = platformColors[p.platform] || '#6b7280';
-      typeBadge.style.cssText = `background:${pColor};color:#fff;border:none;`;
-      // Disable Run for external problems
-      const btnRun = document.getElementById('btn-run');
-      btnRun.disabled = true;
-      btnRun.title    = 'Run is unavailable for external problems';
-    }
-
     sampleTestCases = p.sample_cases || [];
     renderProblemBody(p);
 
@@ -576,62 +527,6 @@ async function init() {
 function renderProblemBody(p) {
   const body = document.getElementById('problem-body');
 
-  if (!isCustom) {
-    // External problem — show fetched content or fallback
-    if (p.fetch_status === 'failed' || !p.statement) {
-      body.innerHTML = `
-        <div style="padding:16px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;margin-bottom:1rem;">
-          ⚠ Problem preview unavailable — content could not be fetched from
-          <strong>${escHtml(p.platform || 'external platform')}</strong>.
-          <br><a href="${escHtml(p.source_url || '#')}" target="_blank" style="color:#b45309;font-weight:600;">
-            View on ${escHtml(p.platform || 'platform')} ↗
-          </a>
-        </div>
-      `;
-      return;
-    }
-
-    // Content fetched — render natively
-    let html = '';
-    html += `<div class="limits-row">
-      <span>⏱ Time: <strong>${p.time_limit_ms ? (p.time_limit_ms / 1000) + 's' : '—'}</strong></span>
-      <span>💾 Memory: <strong>${p.memory_limit_mb ? p.memory_limit_mb + ' MB' : '—'}</strong></span>
-    </div>`;
-
-    if (p.constraints_text) html += probSection('Constraints', p.constraints_text);
-
-    // statement is HTML from scraper — do NOT escape
-    html += `<div class="prob-section"><h4>Problem Statement</h4>
-      <div class="content" style="white-space:normal;">${p.statement}</div></div>`;
-
-    const samples = p.sample_cases || [];
-    html += `<div class="prob-section"><h4>Sample Test Cases</h4>`;
-    if (samples.length === 0) {
-      html += `<p style="font-size:0.875rem;color:var(--text-muted);">No sample cases available.</p>`;
-    } else {
-      samples.forEach((sc, i) => {
-        html += `
-          <div style="font-size:0.72rem;font-weight:600;color:var(--text-muted);margin-bottom:0.25rem;">Example ${i + 1}</div>
-          <div class="test-case-block">
-            <div class="tc-pane"><label>Input</label><pre>${escHtml(sc.input)}</pre></div>
-            <div class="tc-pane"><label>Expected Output</label><pre>${escHtml(sc.expected_output || '')}</pre></div>
-          </div>`;
-      });
-    }
-    html += `</div>`;
-
-    html += `<div class="prob-section" style="margin-top:0.5rem;">
-      <a href="${escHtml(p.source_url || '#')}" target="_blank" rel="noopener"
-         style="font-size:0.8rem;color:var(--text-muted);">
-        View original on ${escHtml(p.platform)} ↗
-      </a>
-    </div>`;
-
-    body.innerHTML = html;
-    return;
-  }
-
-  // Custom problem
   let html = '';
   html += `<div class="limits-row">
     <span>⏱ Time: <strong>${p.time_limit_ms} ms</strong></span>
@@ -716,9 +611,10 @@ function onLangChange() {
 // Contest timer + early-end detection
 // ================================================================
 function startTimer(endTime) {
+  currentEndMs = typeof endTime === 'number' ? endTime : new Date(endTime).getTime();
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(() => {
-    const remaining = new Date(endTime) - Date.now();
+    const remaining = currentEndMs - Date.now();
     if (remaining <= 0) {
       clearInterval(timerInterval);
       timerInterval = null;
@@ -734,6 +630,10 @@ function startTimer(endTime) {
       timerEl.style.color = remaining < 300000 ? '#ef4444' : '';
     }
   }, 1000);
+}
+
+function updateTimerEndTime(newEndTimeISO) {
+  currentEndMs = new Date(newEndTimeISO).getTime();
 }
 
 async function checkContestStatus() {
@@ -761,8 +661,6 @@ function showEndedBanner() {
 // Run button — runs against sample test cases via /api/run
 // ================================================================
 async function doRun() {
-  if (!isCustom) return;
-
   const btnRun  = document.getElementById('btn-run');
   const section = document.getElementById('run-output-section');
   const inner   = document.getElementById('run-output-inner');

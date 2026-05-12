@@ -18,7 +18,10 @@
       "Bash(node -e \"require\\('dotenv'\\).config\\(\\); console.log\\('KEY:', process.env.ONECOMPILER_API_KEY ? 'SET ✓ → ' + process.env.ONECOMPILER_API_KEY.slice\\(0,8\\) + '...' : 'MISSING ✗'\\)\")",
       "Bash(node --check services/judge.js)",
       "Bash(node --check controllers/profileController.js)",
-      "PowerShell(Get-NetTCPConnection *)"
+      "PowerShell(Get-NetTCPConnection *)",
+      "Bash(Remove-Item -Path \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Desktop\\\\ocms\\\\contest-system\\\\services\\\\problemScraper.js\" -Force)",
+      "Bash(Remove-Item -Path \"C:\\\\Users\\\\DELL\\\\OneDrive\\\\Desktop\\\\ocms\\\\contest-system\\\\services\\\\externalFetcher.js\" -Force)",
+      "Bash(Write-Output \"Deleted\")"
     ]
   }
 }

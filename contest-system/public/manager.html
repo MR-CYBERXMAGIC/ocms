@@ -82,26 +82,6 @@
       overflow-y: auto;
     }
 
-    /* ---- Add problem type toggle ---- */
-    .type-toggle {
-      display: flex;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      overflow: hidden;
-      margin-bottom: 1.1rem;
-    }
-    .type-btn {
-      flex: 1;
-      padding: 0.5rem 0.75rem;
-      background: none;
-      border: none;
-      font-size: 0.875rem;
-      cursor: pointer;
-      color: var(--text-muted);
-      transition: background 0.12s, color 0.12s;
-    }
-    .type-btn.active { background: var(--accent); color: #fff; font-weight: 600; }
-
     /* ---- Danger zone ---- */
     .danger-zone {
       border: 1px solid #fc8181;
@@ -112,6 +92,156 @@
     }
     .danger-zone h4 { color: var(--red); font-size: 0.875rem; margin-bottom: 0.4rem; }
     .danger-zone p  { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.875rem; }
+
+    /* ---- Problems tab ---- */
+    .tab-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .tab-header-row h3 { margin: 0; }
+    .no-problems-yet {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 1.5rem 0;
+    }
+    .error-text {
+      font-size: 0.8rem;
+      color: var(--red, #e74c3c);
+      text-align: center;
+      padding: 1rem 0;
+    }
+    .loading-text { color: var(--text-muted); font-size: 0.875rem; }
+    .manager-table { width: 100%; border-collapse: collapse; }
+    .manager-table th,
+    .manager-table td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      font-size: 0.875rem;
+    }
+    .manager-table th {
+      font-weight: 700;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .prob-label-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.75rem;
+    }
+
+    /* ---- Add-problem form (injected by addProblem.js) ---- */
+    .add-problem-form .form-section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+    .field-error {
+      color: var(--red, #e74c3c);
+      font-size: 0.78rem;
+      margin-top: 0.2rem;
+      display: none;
+    }
+    .required { color: var(--red, #e74c3c); }
+    .hint-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.4rem;
+    }
+    .hint-input { flex: 1; font-size: 0.875rem; }
+    .btn-remove-hint {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 0.2rem 0.45rem;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+    .test-case-row {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 2rem 0.6rem 0.6rem;
+      margin-bottom: 0.5rem;
+      position: relative;
+      background: var(--card-bg);
+    }
+    .tc-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .tc-col label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+    .btn-remove-tc {
+      position: absolute;
+      top: 0.4rem;
+      right: 0.4rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+    .csv-format-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      line-height: 1.6;
+    }
+    .csv-format-box code {
+      font-family: 'SF Mono', Consolas, monospace;
+      background: var(--bg);
+      padding: 0.1em 0.3em;
+      border-radius: 3px;
+    }
+    .form-actions {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+    #add-prob-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 0.5rem 1.25rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    #add-prob-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-secondary {
+      background: var(--border);
+      color: var(--text);
+      border: none;
+      border-radius: 6px;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .btn-sm { padding: 0.25rem 0.75rem !important; font-size: 0.8rem !important; }
   </style>
 </head>
 <body>
@@ -124,9 +254,9 @@
       <p>Programming Contests</p>
     </div>
     <ul class="sidebar-nav">
-      <li><a href="/">🏠&nbsp; Home</a></li>
-      <li><a href="/contests.html" class="active">🏆&nbsp; Contests</a></li>
-      <li><a href="/users.html">👥&nbsp; Users</a></li>
+      <li><a href="/">&#127968;&nbsp; Home</a></li>
+      <li><a href="/contests.html" class="active">&#127942;&nbsp; Contests</a></li>
+      <li><a href="/users.html">&#128101;&nbsp; Users</a></li>
     </ul>
     <div class="sidebar-footer">
       <div class="sidebar-user">
@@ -151,7 +281,7 @@
           <div style="margin-left:auto;display:flex;gap:0.5rem;">
             <a id="contest-link" href="#"
                class="btn btn-sm" style="background:var(--border);color:var(--text);">View Contest</a>
-            <button onclick="openAddProblem()"
+            <button onclick="goToAddProblem()"
                     class="btn btn-primary btn-sm">+ Add Problem</button>
           </div>
         </div>
@@ -167,7 +297,7 @@
            style="display:none;background:#fee2e2;border:1px solid #ef4444;
                   padding:0.75rem 1rem;border-radius:8px;margin-bottom:1rem;
                   color:#991b1b;font-size:0.875rem;font-weight:600;">
-        ⚫ This contest has ended. Some actions are disabled.
+        &#9679; This contest has ended. Some actions are disabled.
       </div>
 
       <!-- Tabs -->
@@ -266,27 +396,25 @@
 
       <!-- ===== Tab 4: Problems ===== -->
       <div id="tab-problems" class="tab-pane">
-        <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem;">
-          <button onclick="openAddProblem()" class="btn btn-primary btn-sm">+ Add Problem</button>
+
+        <div class="tab-header-row">
+          <h3>Problems</h3>
+          <button class="btn btn-primary btn-sm" id="toggle-add-form-btn"
+            onclick="toggleAddProblemForm()">
+            + Add Problem
+          </button>
         </div>
-        <div class="card">
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th style="width:60px;">Label</th>
-                  <th>Title</th>
-                  <th style="width:100px;">Type</th>
-                  <th style="width:100px;">Platform</th>
-                  <th style="width:90px;"></th>
-                </tr>
-              </thead>
-              <tbody id="mproblems-tbody">
-                <tr class="empty-row"><td colspan="5">Loading…</td></tr>
-              </tbody>
-            </table>
-          </div>
+
+        <!-- Add problem form (shared module renders here) -->
+        <div id="add-problem-container" style="display:none; margin-bottom:24px;">
+          <!-- getAddProblemFormHTML() injected here by JS -->
         </div>
+
+        <!-- Current problems list -->
+        <div id="manager-problems-list">
+          <p class="loading-text">Loading problems...</p>
+        </div>
+
       </div>
 
       <!-- ===== Tab 5: Edit Contest ===== -->
@@ -347,7 +475,7 @@
 <!-- ===== Code-view modal ===== -->
 <div id="code-modal" class="modal-overlay hidden" onclick="closeCodeModal(event)">
   <div class="modal-box">
-    <button class="modal-close" onclick="document.getElementById('code-modal').classList.add('hidden')">✕</button>
+    <button class="modal-close" onclick="document.getElementById('code-modal').classList.add('hidden')">&#x2715;</button>
     <h3 id="code-modal-title">Submission Code</h3>
     <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;">
       <span id="cm-username" class="badge badge-pending"></span>
@@ -360,116 +488,6 @@
   </div>
 </div>
 
-<!-- ===== Add Problem modal ===== -->
-<div id="add-modal" class="modal-overlay hidden" onclick="closeAddModal(event)">
-  <div class="modal-box" style="max-width:580px;">
-    <button class="modal-close" onclick="document.getElementById('add-modal').classList.add('hidden')">✕</button>
-    <h3>Add Problem</h3>
-
-    <div id="add-alert" class="hidden" style="margin-bottom:1rem;"></div>
-
-    <!-- Type selector -->
-    <div class="type-toggle">
-      <button type="button" class="type-btn active" id="type-custom-btn"
-              onclick="setProblemType('custom')">Custom</button>
-      <button type="button" class="type-btn"        id="type-ext-btn"
-              onclick="setProblemType('external')">External</button>
-    </div>
-
-    <!-- Custom fields -->
-    <div id="custom-fields">
-      <div class="form-group">
-        <label>Title <span style="color:var(--red);">*</span></label>
-        <input type="text" id="p-title" class="form-control" placeholder="e.g. Two Sum">
-      </div>
-      <div class="form-group">
-        <label>Problem Statement <span style="color:var(--red);">*</span></label>
-        <textarea id="p-statement" class="form-control" rows="4"
-                  placeholder="Describe the problem…"></textarea>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Input Format</label>
-          <textarea id="p-input-fmt" class="form-control" rows="2"></textarea>
-        </div>
-        <div class="form-group">
-          <label>Output Format</label>
-          <textarea id="p-output-fmt" class="form-control" rows="2"></textarea>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Constraints</label>
-        <textarea id="p-constraints" class="form-control" rows="2"></textarea>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Time Limit (ms)</label>
-          <input type="number" id="p-time-limit" class="form-control" value="1000" min="100">
-        </div>
-        <div class="form-group">
-          <label>Memory Limit (MB)</label>
-          <input type="number" id="p-mem-limit"  class="form-control" value="256"  min="16">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Hints</label>
-        <textarea id="p-hints" class="form-control" rows="2"></textarea>
-      </div>
-    </div>
-
-    <!-- External fields -->
-    <div id="external-fields" class="hidden">
-      <div class="form-group">
-        <label>Platform <span style="color:var(--red);">*</span></label>
-        <select id="p-platform" class="form-control">
-          <option value="">Select platform…</option>
-          <option value="CSES">CSES</option>
-          <option value="CodeChef">CodeChef</option>
-          <option value="HackerRank">HackerRank</option>
-          <option value="USACO">USACO</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Source URL <span style="color:var(--red);">*</span></label>
-        <input type="url" id="p-source-url" class="form-control"
-               placeholder="https://cses.fi/problemset/task/1068">
-      </div>
-      <div class="form-group">
-        <label>Title <span style="font-weight:400;color:var(--text-muted);font-size:0.78rem;">(optional — auto-detected from URL)</span></label>
-        <input type="text" id="p-ext-title" class="form-control" placeholder="Leave blank to auto-detect">
-      </div>
-    </div>
-
-    <div style="display:flex;gap:0.6rem;margin-top:0.5rem;">
-      <button type="button" class="btn btn-primary" id="add-submit-btn"
-              onclick="submitAddProblem()">Add Problem</button>
-      <button type="button" class="btn" style="background:var(--border);color:var(--text);"
-              onclick="document.getElementById('add-modal').classList.add('hidden')">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== Delete Problem confirmation modal ===== -->
-<div id="delete-modal" class="modal-overlay hidden" onclick="closeDeleteModal(event)">
-  <div class="modal-box" style="max-width:420px;">
-    <button class="modal-close" onclick="document.getElementById('delete-modal').classList.add('hidden')">✕</button>
-    <h3>Remove Problem</h3>
-    <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;">
-      Remove problem <strong id="delete-prob-label"></strong>:
-      <span id="delete-prob-title" style="font-style:italic;"></span>
-    </p>
-    <p style="color:#c53030;font-size:0.8rem;margin-bottom:1.25rem;">
-      All submissions for this problem in this contest will be deleted and scores recalculated.
-    </p>
-    <div id="delete-alert" class="hidden" style="margin-bottom:0.75rem;"></div>
-    <div style="display:flex;gap:0.75rem;">
-      <button onclick="confirmDeleteProblem()" id="delete-confirm-btn" class="btn btn-danger btn-sm">Delete</button>
-      <button onclick="document.getElementById('delete-modal').classList.add('hidden')"
-              class="btn btn-sm" style="background:var(--border);color:var(--text);">Cancel</button>
-    </div>
-  </div>
-</div>
-
 <script src="/js/toast.js"></script>
 <script src="/js/addProblem.js"></script>
 <script src="/js/api.js"></script>
@@ -479,8 +497,10 @@ const params    = new URLSearchParams(location.search);
 const contestId = params.get('id');
 if (!contestId) { location.href = '/contests.html'; }
 
+// Set for the addProblem.js shared module
+window.currentContestId = contestId;
+
 let contestProblems = [];
-let addProblemType  = 'custom';
 
 // ================================================================
 // Bootstrap
@@ -511,22 +531,22 @@ async function init() {
     contestProblems = data.problems || [];
 
     document.title = `Manager — ${data.name}`;
-    document.getElementById('contest-name').textContent  = data.name;
+    document.getElementById('contest-name').textContent = data.name;
     document.getElementById('contest-link').href = `/contest.html?id=${contestId}`;
 
     // Status badge
     const state = data.contest_state;
     const statusBadges = {
-      upcoming: '<span class="badge badge-upcoming">🔵 Upcoming</span>',
-      running:  '<span class="badge badge-running">🟢 Running</span>',
-      ended:    '<span class="badge badge-ended">⚫ Ended</span>',
+      upcoming: '<span class="badge badge-upcoming">&#128309; Upcoming</span>',
+      running:  '<span class="badge badge-running">&#128994; Running</span>',
+      ended:    '<span class="badge badge-ended">&#9899; Ended</span>',
     };
     document.getElementById('contest-status-badge').innerHTML = statusBadges[state] || '';
 
     // State banners
     if (state === 'upcoming') {
       const banner = document.getElementById('contest-upcoming-banner');
-      banner.textContent   = `⏳ Contest starts at ${new Date(data.start_time).toLocaleString()}`;
+      banner.textContent   = `&#9203; Contest starts at ${new Date(data.start_time).toLocaleString()}`;
       banner.style.display = 'block';
     } else if (state === 'ended') {
       document.getElementById('contest-ended-banner').style.display = 'block';
@@ -536,21 +556,55 @@ async function init() {
     document.getElementById('edit-name').value = data.name;
     document.getElementById('edit-desc').value = data.description || '';
 
-    // Start time and duration — editable only if upcoming
     const isUpcoming = data.contest_state === 'upcoming';
+    const isRunning  = data.contest_state === 'running';
 
     const startInput    = document.getElementById('edit-start-time');
     startInput.value    = new Date(data.start_time).toISOString().slice(0, 16);
     startInput.disabled = !isUpcoming;
 
     const durInput    = document.getElementById('edit-duration');
-    durInput.value    = data.duration_minutes;
-    durInput.disabled = !isUpcoming;
+    durInput.value           = data.duration_minutes;
+    durInput.disabled        = !(isUpcoming || isRunning);
+    durInput.dataset.state   = data.contest_state;
+    durInput.dataset.elapsed = data.elapsed_minutes || 0;
 
-    const editableHint = 'Can be changed while contest has not started.';
-    const lockedHint   = 'Cannot change after contest has started.';
-    document.getElementById('start-time-hint').textContent = isUpcoming ? editableHint : lockedHint;
-    document.getElementById('duration-hint').textContent   = isUpcoming ? editableHint : lockedHint;
+    if (isRunning) {
+      durInput.min = (data.elapsed_minutes || 0) + 1;
+    }
+
+    document.getElementById('start-time-hint').textContent = isUpcoming
+      ? 'Can be changed before contest starts.'
+      : 'Cannot change after contest has started.';
+
+    const durationHintEl = document.getElementById('duration-hint');
+    if (isRunning) {
+      const elapsed = data.elapsed_minutes || 0;
+      durationHintEl.textContent = `Contest has been running for ${elapsed} minute${elapsed !== 1 ? 's' : ''}. New duration must be greater than ${elapsed} minutes.`;
+      durationHintEl.style.color = '#d97706';
+    } else if (isUpcoming) {
+      durationHintEl.textContent = 'Can be changed before contest starts.';
+      durationHintEl.style.color = '';
+    } else {
+      durationHintEl.textContent = 'Cannot change duration of an ended contest.';
+      durationHintEl.style.color = '';
+    }
+
+    // Live elapsed counter — refreshes hint every 60 s while running
+    if (isRunning) {
+      const elapsedInterval = setInterval(async () => {
+        try {
+          const r = await fetch(`/api/contests/${contestId}`, { credentials: 'include' });
+          const d = await r.json();
+          if (d.contest_state !== 'running') { clearInterval(elapsedInterval); return; }
+          const e = d.elapsed_minutes || 0;
+          durInput.dataset.elapsed = e;
+          durInput.min = e + 1;
+          document.getElementById('duration-hint').textContent =
+            `Contest has been running for ${e} minute${e !== 1 ? 's' : ''}. New duration must be greater than ${e} minutes.`;
+        } catch (_) {}
+      }, 60000);
+    }
 
     // Populate problem filter dropdown
     const sel = document.getElementById('filter-problem');
@@ -564,13 +618,10 @@ async function init() {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('content').classList.remove('hidden');
 
-    // Load all tabs
     loadSubmissions();
     loadStats();
     loadParticipants();
-    loadMProblems();
 
-    // SSE for real-time updates
     initSSE(contestId);
   } catch (err) {
     document.getElementById('loading').textContent = 'Failed to load manager panel.';
@@ -587,7 +638,21 @@ function switchTab(name, btn) {
   document.getElementById(`tab-${name}`).classList.add('active');
   if (btn) btn.classList.add('active');
   if (name === 'participants') loadParticipants();
-  if (name === 'problems')     loadMProblems();
+  if (name === 'problems')     loadManagerProblemsList();
+}
+
+// Shortcut used by the page-header "+ Add Problem" button
+function goToAddProblem() {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-problems').classList.add('active');
+  document.getElementById('tab-btn-problems').classList.add('active');
+  loadManagerProblemsList();
+  // Open add form if not already open
+  const container = document.getElementById('add-problem-container');
+  if (container.style.display === 'none') {
+    toggleAddProblemForm();
+  }
 }
 
 // ================================================================
@@ -710,161 +775,6 @@ function renderStats(stats) {
 }
 
 // ================================================================
-// Tab 3: Edit Contest
-// ================================================================
-async function saveEdit(e) {
-  e.preventDefault();
-  const alertEl = document.getElementById('edit-alert');
-  const btn     = document.getElementById('save-btn');
-  alertEl.classList.add('hidden');
-  btn.disabled    = true;
-  btn.textContent = 'Saving…';
-
-  const startInput = document.getElementById('edit-start-time');
-  const durInput   = document.getElementById('edit-duration');
-
-  const body = {
-    name:        document.getElementById('edit-name').value,
-    description: document.getElementById('edit-desc').value,
-    password:    document.getElementById('edit-password').value,
-  };
-
-  if (!startInput.disabled && startInput.value) {
-    body.start_time = new Date(startInput.value).toISOString();
-  }
-  if (!durInput.disabled && durInput.value) {
-    body.duration_minutes = parseInt(durInput.value);
-  }
-
-  try {
-    await apiFetch(`/contests/${contestId}`, { method: 'PATCH', body });
-    alertEl.className   = 'alert alert-success';
-    alertEl.textContent = 'Saved successfully.';
-    alertEl.classList.remove('hidden');
-    document.getElementById('edit-password').value = '';
-    document.getElementById('contest-name').textContent = body.name;
-    document.title = `Manager — ${body.name}`;
-  } catch (err) {
-    alertEl.className   = 'alert alert-error';
-    alertEl.textContent = err.message || 'Save failed.';
-    alertEl.classList.remove('hidden');
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = 'Save Changes';
-  }
-}
-
-async function doEndContest() {
-  if (!confirm('End this contest now? This cannot be undone.')) return;
-  const btn = document.getElementById('end-btn');
-  btn.disabled    = true;
-  btn.textContent = 'Ending…';
-  try {
-    await apiFetch(`/contests/${contestId}/end`, { method: 'POST' });
-    btn.textContent = 'Contest Ended';
-    location.href = `/contest.html?id=${contestId}`;
-  } catch (err) {
-    const errEl = document.getElementById('end-err');
-    errEl.textContent = err.message || 'Failed to end contest.';
-    errEl.classList.remove('hidden');
-    btn.disabled    = false;
-    btn.textContent = 'End Contest Early';
-  }
-}
-
-// ================================================================
-// Add Problem modal
-// ================================================================
-function openAddProblem() {
-  document.getElementById('add-modal').classList.remove('hidden');
-  document.getElementById('add-alert').classList.add('hidden');
-  setProblemType('custom');
-}
-
-function closeAddModal(e) {
-  if (e.target === document.getElementById('add-modal')) {
-    document.getElementById('add-modal').classList.add('hidden');
-  }
-}
-
-function setProblemType(type) {
-  addProblemType = type;
-  const isCustom = (type === 'custom');
-  document.getElementById('custom-fields').classList.toggle('hidden', !isCustom);
-  document.getElementById('external-fields').classList.toggle('hidden', isCustom);
-  document.getElementById('type-custom-btn').classList.toggle('active', isCustom);
-  document.getElementById('type-ext-btn').classList.toggle('active', !isCustom);
-}
-
-async function submitAddProblem() {
-  const alertEl = document.getElementById('add-alert');
-  const btn     = document.getElementById('add-submit-btn');
-  alertEl.classList.add('hidden');
-  btn.disabled    = true;
-  btn.textContent = 'Adding…';
-
-  try {
-    let body;
-    if (addProblemType === 'custom') {
-      const title     = document.getElementById('p-title').value.trim();
-      const statement = document.getElementById('p-statement').value.trim();
-      if (!title || !statement) throw new Error('Title and Statement are required');
-
-      body = {
-        type:             'custom',
-        title,
-        statement,
-        input_format:     document.getElementById('p-input-fmt').value.trim()    || undefined,
-        output_format:    document.getElementById('p-output-fmt').value.trim()   || undefined,
-        constraints_text: document.getElementById('p-constraints').value.trim()  || undefined,
-        time_limit_ms:    parseInt(document.getElementById('p-time-limit').value) || 1000,
-        memory_limit_mb:  parseInt(document.getElementById('p-mem-limit').value)  || 256,
-        hints:            document.getElementById('p-hints').value.trim()         || undefined,
-      };
-    } else {
-      const platform   = document.getElementById('p-platform').value;
-      const source_url = document.getElementById('p-source-url').value.trim();
-
-      // Client-side validation before hitting the server
-      const urlError = validateProblemURL(platform, source_url);
-      if (urlError) throw new Error(urlError);
-
-      body = {
-        type:       'external',
-        platform,
-        source_url,
-        title:      document.getElementById('p-ext-title').value.trim() || undefined,
-      };
-    }
-
-    const result = await apiFetch(`/contests/${contestId}/problems`, {
-      method: 'POST', body,
-    });
-
-    alertEl.className   = 'alert alert-success';
-    alertEl.textContent = `Problem ${result.label} added successfully!`;
-    alertEl.classList.remove('hidden');
-
-    // Refresh problem filter dropdown
-    const sel = document.getElementById('filter-problem');
-    const opt = document.createElement('option');
-    opt.value       = result.problem_id;
-    opt.textContent = `${result.label} — ${body.title || body.statement?.slice(0,40)}`;
-    sel.appendChild(opt);
-
-    // Reload stats
-    loadStats();
-  } catch (err) {
-    alertEl.className   = 'alert alert-error';
-    alertEl.textContent = err.message || 'Failed to add problem.';
-    alertEl.classList.remove('hidden');
-  } finally {
-    btn.disabled    = false;
-    btn.textContent = 'Add Problem';
-  }
-}
-
-// ================================================================
 // Tab 3: Participants
 // ================================================================
 async function loadParticipants() {
@@ -938,91 +848,223 @@ async function kickParticipant(userId, username) {
 }
 
 // ================================================================
-// Tab 4: Problems management
+// Tab 4: Problems
 // ================================================================
-let deleteProblemId   = null;
-let deleteProblemLabel = null;
+function toggleAddProblemForm() {
+  const container = document.getElementById('add-problem-container');
+  const btn       = document.getElementById('toggle-add-form-btn');
 
-async function loadMProblems() {
+  if (container.style.display === 'none') {
+    window.currentContestId = contestId;
+    container.innerHTML     = getAddProblemFormHTML();
+    container.style.display = 'block';
+    btn.textContent         = '&#x2715; Cancel';
+  } else {
+    container.style.display = 'none';
+    btn.textContent         = '+ Add Problem';
+  }
+}
+
+// Cancel from within the shared form collapses the container
+window.cancelAddProblem = function () {
+  const container = document.getElementById('add-problem-container');
+  if (container) container.style.display = 'none';
+  const btn = document.getElementById('toggle-add-form-btn');
+  if (btn) btn.textContent = '+ Add Problem';
+};
+
+// Override onProblemAdded for manager context
+window.onProblemAdded = function (problem) {
+  if (typeof showToast === 'function') {
+    showToast(`Problem "${problem.title}" added!`, 'success');
+  }
+
+  // Collapse the add form
+  const container = document.getElementById('add-problem-container');
+  if (container) container.style.display = 'none';
+  const toggleBtn = document.getElementById('toggle-add-form-btn');
+  if (toggleBtn) toggleBtn.textContent = '+ Add Problem';
+
+  // Update the filter dropdown
+  const sel = document.getElementById('filter-problem');
+  if (sel && problem.id) {
+    const opt = document.createElement('option');
+    opt.value       = problem.id;
+    opt.textContent = `${problem.label} — ${problem.title}`;
+    sel.appendChild(opt);
+  }
+
+  // Reload problems list and stats
+  loadManagerProblemsList();
+  loadStats();
+};
+
+async function loadManagerProblemsList() {
+  const listEl = document.getElementById('manager-problems-list');
+  listEl.innerHTML = '<p class="loading-text">Loading...</p>';
+
   try {
-    const data = await apiFetch(`/contests/${contestId}/problems`);
-    if (!data) return;
-    renderMProblems(data.problems);
+    const res  = await fetch(`/api/contests/${contestId}/problems`);
+    const data = await res.json();
+    const problems = data.problems || [];
+
+    if (!problems.length) {
+      listEl.innerHTML = '<p class="no-problems-yet">No problems added yet.</p>';
+      return;
+    }
+
+    listEl.innerHTML = `
+      <table class="manager-table">
+        <thead>
+          <tr>
+            <th>Label</th>
+            <th>Title</th>
+            <th>Time Limit</th>
+            <th>Test Cases</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${problems.map(p => `
+            <tr>
+              <td><span class="prob-label-badge">${escapeHtml(p.label)}</span></td>
+              <td>
+                <a href="/problem.html?contestId=${contestId}&problemId=${p.id}"
+                   target="_blank" style="color:var(--accent);">${escapeHtml(p.title)}</a>
+              </td>
+              <td style="color:var(--text-muted);">${p.time_limit_ms ? p.time_limit_ms + 'ms' : '2000ms'}</td>
+              <td style="color:var(--text-muted);">${p.test_case_count != null ? p.test_case_count : '—'}</td>
+              <td>
+                <button class="btn btn-sm"
+                        style="background:#fed7d7;color:#c53030;font-size:0.75rem;"
+                        onclick="confirmDeleteProblem(${p.id}, '${escapeHtml(p.label)}', '${escapeHtml(p.title).replace(/'/g,"\\'")}')">
+                  Delete
+                </button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
   } catch (err) {
-    document.getElementById('mproblems-tbody').innerHTML =
-      `<tr class="empty-row"><td colspan="5">${escHtml(err.message)}</td></tr>`;
+    listEl.innerHTML = '<p class="error-text">Failed to load problems.</p>';
   }
 }
 
-function renderMProblems(problems) {
-  const tbody = document.getElementById('mproblems-tbody');
-  if (!problems.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No problems added yet</td></tr>';
-    return;
-  }
-  tbody.innerHTML = problems.map(p => `
-    <tr>
-      <td><strong>${escHtml(p.label)}</strong></td>
-      <td>
-        <a href="/problem.html?contestId=${contestId}&problemId=${p.id}"
-           target="_blank" style="color:var(--accent);">${escHtml(p.title)}</a>
-      </td>
-      <td style="color:var(--text-muted);">${p.type === 'external' ? 'External' : 'Custom'}</td>
-      <td style="color:var(--text-muted);">${escHtml(p.platform || '—')}</td>
-      <td>
-        <button class="btn btn-sm"
-                style="background:#fed7d7;color:#c53030;font-size:0.75rem;"
-                onclick="openDeleteProblem(${p.id}, '${escHtml(p.label)}', '${escHtml(p.title.replace(/'/g, "\\'"))}')">
-          Delete
-        </button>
-      </td>
-    </tr>
-  `).join('');
+function confirmDeleteProblem(problemId, label, title) {
+  const confirmed = window.confirm(
+    `Delete Problem ${label} — "${title}"?\n\n` +
+    `This will permanently delete ALL submissions for this problem ` +
+    `and recalculate all scores. This cannot be undone.`
+  );
+  if (!confirmed) return;
+  deleteProblem(problemId, label, title);
 }
 
-function openDeleteProblem(problemId, label, title) {
-  deleteProblemId    = problemId;
-  deleteProblemLabel = label;
-  document.getElementById('delete-prob-label').textContent = label;
-  document.getElementById('delete-prob-title').textContent = title;
-  document.getElementById('delete-alert').classList.add('hidden');
-  document.getElementById('delete-confirm-btn').disabled    = false;
-  document.getElementById('delete-confirm-btn').textContent = 'Delete';
-  document.getElementById('delete-modal').classList.remove('hidden');
-}
-
-function closeDeleteModal(e) {
-  if (e.target === document.getElementById('delete-modal')) {
-    document.getElementById('delete-modal').classList.add('hidden');
-  }
-}
-
-async function confirmDeleteProblem() {
-  if (!deleteProblemId) return;
-  const btn     = document.getElementById('delete-confirm-btn');
-  const alertEl = document.getElementById('delete-alert');
-  btn.disabled    = true;
-  btn.textContent = 'Deleting…';
-  alertEl.classList.add('hidden');
+async function deleteProblem(problemId, label, title) {
   try {
-    await apiFetch(`/contests/${contestId}/problems/${deleteProblemId}`, { method: 'DELETE' });
-    document.getElementById('delete-modal').classList.add('hidden');
-    showToast(`Problem ${deleteProblemLabel} deleted`, 'success');
-    loadMProblems();
+    const res = await fetch(`/api/contests/${contestId}/problems/${problemId}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      showToast(data.error || 'Failed to delete problem.', 'error');
+      return;
+    }
+    showToast(`Problem ${label} — "${title}" deleted. Scores recalculated.`, 'warning');
+    loadManagerProblemsList();
     loadStats();
     loadSubmissions();
   } catch (err) {
-    alertEl.className   = 'alert alert-error';
-    alertEl.textContent = err.message || 'Failed to delete problem.';
-    alertEl.classList.remove('hidden');
-    btn.disabled    = false;
-    btn.textContent = 'Delete';
+    showToast('Network error: ' + err.message, 'error');
   }
 }
 
-// SSE events — refresh relevant tabs
-function onProblemAdded(_d)   { loadMProblems(); loadStats(); }
-function onProblemDeleted(_d) { loadMProblems(); loadStats(); loadSubmissions(); }
+function escapeHtml(str) {
+  return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ================================================================
+// Tab 5: Edit Contest
+// ================================================================
+async function saveEdit(e) {
+  e.preventDefault();
+  const alertEl = document.getElementById('edit-alert');
+  const btn     = document.getElementById('save-btn');
+  alertEl.classList.add('hidden');
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+
+  const startInput = document.getElementById('edit-start-time');
+  const durInput   = document.getElementById('edit-duration');
+
+  const body = {
+    name:        document.getElementById('edit-name').value,
+    description: document.getElementById('edit-desc').value,
+    password:    document.getElementById('edit-password').value,
+  };
+
+  if (!startInput.disabled && startInput.value) {
+    body.start_time = new Date(startInput.value).toISOString();
+  }
+  if (!durInput.disabled && durInput.value) {
+    body.duration_minutes = parseInt(durInput.value);
+  }
+
+  // Client-side guard: running contest cannot reduce duration below elapsed time
+  if (!durInput.disabled && durInput.value) {
+    const newDur  = parseInt(durInput.value);
+    const elapsed = parseInt(durInput.dataset.elapsed || '0');
+    if (durInput.dataset.state === 'running' && newDur <= elapsed) {
+      alertEl.className   = 'alert alert-error';
+      alertEl.textContent = `Duration must be greater than ${elapsed} minutes (already elapsed).`;
+      alertEl.classList.remove('hidden');
+      btn.disabled    = false;
+      btn.textContent = 'Save Changes';
+      return;
+    }
+  }
+
+  try {
+    await apiFetch(`/contests/${contestId}`, { method: 'PATCH', body });
+    alertEl.className   = 'alert alert-success';
+    alertEl.textContent = 'Saved successfully.';
+    alertEl.classList.remove('hidden');
+    document.getElementById('edit-password').value = '';
+    document.getElementById('contest-name').textContent = body.name;
+    document.title = `Manager — ${body.name}`;
+  } catch (err) {
+    alertEl.className   = 'alert alert-error';
+    alertEl.textContent = err.message || 'Save failed.';
+    alertEl.classList.remove('hidden');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Save Changes';
+  }
+}
+
+async function doEndContest() {
+  if (!confirm('End this contest now? This cannot be undone.')) return;
+  const btn = document.getElementById('end-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Ending…';
+  try {
+    await apiFetch(`/contests/${contestId}/end`, { method: 'POST' });
+    btn.textContent = 'Contest Ended';
+    location.href = `/contest.html?id=${contestId}`;
+  } catch (err) {
+    const errEl = document.getElementById('end-err');
+    errEl.textContent = err.message || 'Failed to end contest.';
+    errEl.classList.remove('hidden');
+    btn.disabled    = false;
+    btn.textContent = 'End Contest Early';
+  }
+}
+
+// ================================================================
+// SSE event handlers
+// ================================================================
+function onProblemDeleted(_d) { loadManagerProblemsList(); loadStats(); loadSubmissions(); }
 function onContestUpdated(_d) { /* manager already knows */ }
 
 // ================================================================

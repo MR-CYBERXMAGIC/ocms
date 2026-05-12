@@ -1,7 +1,5 @@
-const { parse }                   = require('csv-parse/sync');
-const pool                        = require('../db/pool');
-const { validateAndFetchProblem } = require('../services/problemScraper');
-const { fetchFullProblem }        = require('../services/externalFetcher');
+const { parse } = require('csv-parse/sync');
+const pool      = require('../db/pool');
 
 // GET /api/contests/:id/problems/:problemId
 const getProblemDetail = async (req, res) => {
@@ -10,9 +8,9 @@ const getProblemDetail = async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `SELECT p.id, p.title, p.type, p.platform, p.source_url,
+      `SELECT p.id, p.title, p.type,
               p.statement, p.input_format, p.output_format, p.constraints_text,
-              p.time_limit_ms, p.memory_limit_mb, p.hints, p.fetch_status, p.sample_cases,
+              p.time_limit_ms, p.memory_limit_mb, p.hints,
               cp.label
        FROM problems p
        JOIN contest_problems cp ON cp.problem_id = p.id
@@ -24,21 +22,12 @@ const getProblemDetail = async (req, res) => {
 
     const problem = rows[0];
 
-    // Normalise sample_cases → always { input, expected_output }
-    if (problem.type === 'custom') {
-      const { rows: tcRows } = await pool.query(
-        `SELECT input, expected_output
-         FROM test_cases WHERE problem_id = $1 AND is_hidden = FALSE ORDER BY id ASC`,
-        [problemId]
-      );
-      problem.sample_cases = tcRows;
-    } else {
-      const raw = Array.isArray(problem.sample_cases) ? problem.sample_cases : [];
-      problem.sample_cases = raw.map(sc => ({
-        input:           sc.input || '',
-        expected_output: sc.expected_output || sc.output || '',
-      }));
-    }
+    const { rows: tcRows } = await pool.query(
+      `SELECT input, expected_output
+       FROM test_cases WHERE problem_id = $1 AND is_hidden = FALSE ORDER BY id ASC`,
+      [problemId]
+    );
+    problem.sample_cases = tcRows;
 
     // Ensure hints is always an array
     if (!Array.isArray(problem.hints)) {
@@ -67,9 +56,31 @@ const addProblem = async (req, res) => {
       return res.status(403).json({ error: 'Forbidden: only the contest manager can add problems' });
     }
 
-    const { type } = req.body;
-    if (!type || !['custom', 'external'].includes(type)) {
-      return res.status(400).json({ error: "type must be 'custom' or 'external'" });
+    const {
+      title, statement, input_format, output_format, constraints_text,
+      time_limit_ms, memory_limit_mb, model_solution, sample_cases,
+    } = req.body;
+    let { hints } = req.body;
+
+    if (!title || !title.trim())
+      return res.status(400).json({ error: 'Problem title is required.' });
+    if (!statement || !statement.trim())
+      return res.status(400).json({ error: 'Problem statement is required.' });
+    if (!input_format || !input_format.trim())
+      return res.status(400).json({ error: 'Input format is required.' });
+    if (!output_format || !output_format.trim())
+      return res.status(400).json({ error: 'Output format is required.' });
+
+    // Duplicate check: same title already in this contest
+    const { rows: dupRows } = await pool.query(
+      `SELECT cp.problem_id FROM contest_problems cp
+         JOIN problems p ON p.id = cp.problem_id
+        WHERE cp.contest_id = $1 AND LOWER(p.title) = LOWER($2)
+        LIMIT 1`,
+      [contestId, title.trim()]
+    );
+    if (dupRows.length) {
+      return res.status(409).json({ error: 'A problem with this title is already in this contest.' });
     }
 
     // Determine next label (A–Z)
@@ -82,138 +93,35 @@ const addProblem = async (req, res) => {
       return res.status(400).json({ error: 'Maximum of 26 problems per contest reached' });
     }
 
-    let problemId;
+    // Normalise hints to TEXT[] — accept string, array, or null
+    if (!Array.isArray(hints)) hints = hints ? [hints] : [];
 
-    if (type === 'external') {
-      const { source_url } = req.body;
-      if (!source_url) {
-        return res.status(400).json({ error: 'source_url is required for external problems' });
-      }
+    const { rows: pRows } = await pool.query(
+      `INSERT INTO problems
+         (title, type, statement, input_format, output_format, constraints_text,
+          time_limit_ms, memory_limit_mb, hints, model_solution, created_by)
+       VALUES ($1, 'custom', $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id`,
+      [
+        title.trim(), statement.trim(),
+        input_format     ? input_format.trim()     : null,
+        output_format    ? output_format.trim()    : null,
+        constraints_text ? constraints_text.trim() : null,
+        time_limit_ms    ? parseInt(time_limit_ms)    : 1000,
+        memory_limit_mb  ? parseInt(memory_limit_mb)  : 256,
+        hints,
+        model_solution   || null,
+        userId,
+      ]
+    );
+    const problemId = pRows[0].id;
 
-      // Validate URL and scrape title + platform
-      const validation = await validateAndFetchProblem(source_url);
-      if (!validation.valid) {
-        return res.status(400).json({ error: validation.error });
-      }
-      const { title, platform } = validation;
-
-      // Duplicate check: same URL or same title already in this contest
-      const { rows: dupRows } = await pool.query(
-        `SELECT cp.problem_id FROM contest_problems cp
-           JOIN problems p ON p.id = cp.problem_id
-          WHERE cp.contest_id = $1
-            AND (p.source_url = $2 OR LOWER(p.title) = LOWER($3))
-          LIMIT 1`,
-        [contestId, source_url, title]
-      );
-      if (dupRows.length) {
-        return res.status(409).json({ error: 'This problem is already in the contest.' });
-      }
-
-      const { rows: pRows } = await pool.query(
-        `INSERT INTO problems (title, type, platform, source_url, created_by, fetch_status)
-         VALUES ($1, 'external', $2, $3, $4, 'pending') RETURNING id`,
-        [title, platform, source_url, userId]
-      );
-      problemId = pRows[0].id;
-
-      // Fire-and-forget: scrape full problem content in background
-      const _pid = problemId;
-      (async () => {
-        try {
-          const fetched = await fetchFullProblem(platform, source_url);
-          if (fetched.fetch_failed) {
-            await pool.query(`UPDATE problems SET fetch_status = 'failed' WHERE id = $1`, [_pid]);
-            return;
-          }
-          await pool.query(`
-            UPDATE problems SET
-              statement        = $1,
-              input_format     = $2,
-              output_format    = $3,
-              constraints_text = $4,
-              time_limit_ms    = $5,
-              memory_limit_mb  = $6,
-              sample_cases     = $7,
-              fetch_status     = 'fetched'
-            WHERE id = $8
-          `, [
-            fetched.statement,
-            fetched.input_format,
-            fetched.output_format,
-            fetched.constraints_text,
-            fetched.time_limit_ms,
-            fetched.memory_limit_mb,
-            JSON.stringify(fetched.sample_cases),
-            _pid,
-          ]);
-          if (fetched.title && fetched.title.length > 2) {
-            await pool.query(`UPDATE problems SET title = $1 WHERE id = $2`, [fetched.title, _pid]);
-          }
-          for (const sc of fetched.sample_cases) {
-            await pool.query(
-              `INSERT INTO test_cases (problem_id, input, expected_output, is_hidden) VALUES ($1, $2, $3, false)`,
-              [_pid, sc.input, sc.output || sc.expected_output || '']
-            );
-          }
-          console.log(`[Fetcher] Fetched external problem ${_pid} (${platform})`);
-        } catch (e) {
-          console.error('[Fetcher] Background fetch failed:', e.message);
-        }
-      })();
-
-    } else {
-      const {
-        title, statement, input_format, output_format, constraints_text,
-        time_limit_ms, memory_limit_mb, model_solution, test_cases,
-      } = req.body;
-      let { hints } = req.body;
-
-      if (!title || !statement) {
-        return res.status(400).json({ error: 'title and statement are required for custom problems' });
-      }
-
-      // Duplicate check: same title already in this contest
-      const { rows: dupRows } = await pool.query(
-        `SELECT cp.problem_id FROM contest_problems cp
-           JOIN problems p ON p.id = cp.problem_id
-          WHERE cp.contest_id = $1 AND LOWER(p.title) = LOWER($2)
-          LIMIT 1`,
-        [contestId, title]
-      );
-      if (dupRows.length) {
-        return res.status(409).json({ error: 'A problem with this title is already in the contest.' });
-      }
-
-      // Normalise hints to TEXT[] — accept string, array, or null
-      if (!Array.isArray(hints)) hints = hints ? [hints] : [];
-
-      const { rows: pRows } = await pool.query(
-        `INSERT INTO problems
-           (title, type, statement, input_format, output_format, constraints_text,
-            time_limit_ms, memory_limit_mb, hints, model_solution, created_by)
-         VALUES ($1, 'custom', $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         RETURNING id`,
-        [
-          title, statement,
-          input_format     || null,
-          output_format    || null,
-          constraints_text || null,
-          time_limit_ms    ? parseInt(time_limit_ms)    : 1000,
-          memory_limit_mb  ? parseInt(memory_limit_mb)  : 256,
-          hints,
-          model_solution   || null,
-          userId,
-        ]
-      );
-      problemId = pRows[0].id;
-
-      if (Array.isArray(test_cases) && test_cases.length) {
-        for (const tc of test_cases) {
+    if (Array.isArray(sample_cases) && sample_cases.length) {
+      for (const sc of sample_cases) {
+        if (sc.input !== undefined && sc.expected_output !== undefined) {
           await pool.query(
-            `INSERT INTO test_cases (problem_id, input, expected_output, is_hidden)
-             VALUES ($1, $2, $3, $4)`,
-            [problemId, tc.input, tc.expected_output, tc.is_hidden || false]
+            `INSERT INTO test_cases (problem_id, input, expected_output, is_hidden) VALUES ($1, $2, $3, false)`,
+            [problemId, sc.input, sc.expected_output]
           );
         }
       }
@@ -224,17 +132,13 @@ const addProblem = async (req, res) => {
       [contestId, problemId, nextLabel]
     );
 
-    // Fetch title for SSE broadcast
-    const { rows: titleRows } = await pool.query(
-      `SELECT title FROM problems WHERE id = $1`, [problemId]
-    );
     global.broadcastToContest(Number(contestId), 'problem_added', {
       problem_id: problemId,
       label:      nextLabel,
-      title:      titleRows[0]?.title || '',
+      title:      title.trim(),
     });
 
-    res.status(201).json({ problem_id: problemId, label: nextLabel });
+    res.status(201).json({ id: problemId, problem_id: problemId, label: nextLabel, title: title.trim() });
   } catch (err) {
     console.error('addProblem error:', err.message);
     res.status(500).json({ error: 'Failed to add problem' });

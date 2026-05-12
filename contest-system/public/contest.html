@@ -75,6 +75,7 @@
       margin: 1rem;
     }
     .modal-box h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }
+    .input-error { border-color: #ef4444 !important; }
   </style>
 </head>
 <body>
@@ -204,7 +205,7 @@
 </div>
 
 <!-- Join modal -->
-<div id="join-modal" class="modal-overlay hidden">
+<div id="join-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeJoinModal()">
   <div class="modal-box">
     <h3>Join Contest</h3>
     <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:1rem;" id="join-modal-desc">
@@ -215,6 +216,7 @@
         <label>Contest Password</label>
         <input type="password" id="join-password" class="form-control"
                placeholder="Enter contest password" onkeydown="if(event.key==='Enter')confirmJoin()">
+        <small id="join-pw-error" style="color:#ef4444;display:none;margin-top:4px;"></small>
       </div>
     </div>
     <div id="join-modal-err" class="alert alert-error hidden"></div>
@@ -304,6 +306,16 @@
     }
   }
 
+  // ── Timer end-time updater (called by SSE duration_changed) ─
+  function updateTimerEndTime(newEndTimeISO) {
+    timerEnd = new Date(newEndTimeISO).getTime();
+    if (timerMode === 'ended' && timerEnd > Date.now()) {
+      timerMode = 'running';
+      document.getElementById('timer-label').textContent = 'Time Remaining';
+      if (!timerInterval) timerInterval = setInterval(updateTimerDisplay, 1000);
+    }
+  }
+
   // ── Problem table ──────────────────────────────────────────
   function renderProblems(problems) {
     const tbody = document.getElementById('problems-body');
@@ -387,23 +399,32 @@
 
   // ── Join modal ─────────────────────────────────────────────
   function openJoinModal() {
-    const modal   = document.getElementById('join-modal');
-    const pwSect  = document.getElementById('join-pw-section');
-    const errEl   = document.getElementById('join-modal-err');
-    const desc    = document.getElementById('join-modal-desc');
+    const modal  = document.getElementById('join-modal');
+    const pwSect = document.getElementById('join-pw-section');
+    const errEl  = document.getElementById('join-modal-err');
+    const pwErr  = document.getElementById('join-pw-error');
+    const pwIn   = document.getElementById('join-password');
+    const desc   = document.getElementById('join-modal-desc');
 
+    // Reset all state
     errEl.classList.add('hidden');
-    document.getElementById('join-password').value = '';
+    errEl.textContent   = '';
+    pwErr.style.display = 'none';
+    pwErr.textContent   = '';
+    pwIn.value          = '';
+    pwIn.classList.remove('input-error');
+    document.getElementById('join-confirm-btn').disabled    = false;
+    document.getElementById('join-confirm-btn').textContent = 'Join';
 
-    if (contest.is_protected) {
+    if (contest.is_password_protected) {
       pwSect.classList.remove('hidden');
       desc.textContent = 'This contest is password-protected.';
+      setTimeout(() => pwIn.focus(), 50);
     } else {
       pwSect.classList.add('hidden');
       desc.textContent = "You're about to join this contest.";
     }
     modal.classList.remove('hidden');
-    if (contest.is_protected) document.getElementById('join-password').focus();
   }
 
   function closeJoinModal() {
@@ -413,24 +434,71 @@
   async function confirmJoin() {
     const btn   = document.getElementById('join-confirm-btn');
     const errEl = document.getElementById('join-modal-err');
+    const pwErr = document.getElementById('join-pw-error');
+    const pwIn  = document.getElementById('join-password');
+
+    // Clear previous errors
     errEl.classList.add('hidden');
-    btn.disabled = true;
+    errEl.textContent   = '';
+    pwErr.style.display = 'none';
+    pwErr.textContent   = '';
+    pwIn.classList.remove('input-error');
+
+    // Client-side empty-password guard
+    if (contest.is_password_protected && !pwIn.value.trim()) {
+      pwErr.textContent   = 'Please enter the contest password.';
+      pwErr.style.display = 'block';
+      pwIn.classList.add('input-error');
+      pwIn.focus();
+      return;
+    }
+
+    btn.disabled    = true;
     btn.textContent = 'Joining…';
 
     const body = {};
-    if (contest.is_protected) {
-      body.password = document.getElementById('join-password').value;
-    }
+    if (contest.is_password_protected) body.password = pwIn.value;
 
     try {
-      await apiFetch(`/contests/${contestId}/join`, { method: 'POST', body });
+      // Use raw fetch — apiFetch redirects on 401, but 401 here means wrong password
+      const res  = await fetch(`/api/contests/${contestId}/join`, {
+        method:      'POST',
+        headers:     { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body:        JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      btn.disabled    = false;
+      btn.textContent = 'Join';
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          // Wrong / missing password
+          pwErr.textContent   = data.error || 'Incorrect password. Try again.';
+          pwErr.style.display = 'block';
+          pwIn.classList.add('input-error');
+          pwIn.value = '';
+          setTimeout(() => pwIn.focus(), 0);
+        } else if (res.status === 409) {
+          // Already joined
+          errEl.textContent = data.error || 'You have already joined this contest.';
+          errEl.classList.remove('hidden');
+          setTimeout(closeJoinModal, 1500);
+        } else {
+          errEl.textContent = data.error || 'Failed to join. Please try again.';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+
       closeJoinModal();
       location.reload();
     } catch (err) {
-      errEl.textContent = err.message || 'Failed to join.';
-      errEl.classList.remove('hidden');
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = 'Join';
+      errEl.textContent = 'Network error: ' + err.message;
+      errEl.classList.remove('hidden');
     }
   }
 
@@ -484,7 +552,7 @@
       const durM = contest.duration_minutes % 60;
       const durStr = durH && durM ? `${durH}h ${durM}m` : durH ? `${durH}h` : `${durM}m`;
       document.getElementById('contest-meta').textContent =
-        `${startStr} · ${durStr}` + (contest.is_protected ? ' · 🔒 Password protected' : '');
+        `${startStr} · ${durStr}` + (contest.is_password_protected ? ' · 🔒 Password protected' : '');
 
       // Populate info card
       const descEl = document.getElementById('contest-description');

@@ -118,6 +118,12 @@ const getContest = async (req, res) => {
     const contest       = contestRows[0];
     const contest_state = getContestState(contest);
 
+    const nowTs         = new Date();
+    const startTs       = new Date(contest.start_time);
+    const elapsed_minutes = nowTs > startTs
+      ? Math.floor((nowTs.getTime() - startTs.getTime()) / 60000)
+      : 0;
+
     let is_joined  = false;
     let is_manager = false;
 
@@ -142,6 +148,7 @@ const getContest = async (req, res) => {
       participant_count:     Number(contest.participant_count),
       problem_count:         Number(contest.problem_count),
       contest_state,
+      elapsed_minutes,
       is_joined,
       is_participant:        is_joined,
       is_manager,
@@ -255,9 +262,9 @@ const joinContest = async (req, res) => {
     if (existing.length) return res.status(409).json({ error: 'Already joined this contest' });
 
     if (contest.password_hash) {
-      if (!password) return res.status(400).json({ error: 'This contest requires a password' });
+      if (!password) return res.status(401).json({ error: 'This contest requires a password.' });
       const valid = await bcrypt.compare(password, contest.password_hash);
-      if (!valid) return res.status(401).json({ error: 'Incorrect contest password' });
+      if (!valid) return res.status(401).json({ error: 'Incorrect password. Try again.' });
     }
 
     await pool.query(
@@ -475,12 +482,21 @@ const updateContest = async (req, res) => {
     }
 
     if (duration_minutes !== undefined) {
-      if (!isUpcoming) {
-        return res.status(400).json({ error: 'Duration cannot be changed after contest has started.' });
+      if (contest.is_ended) {
+        return res.status(400).json({ error: 'Duration cannot be changed after the contest has ended.' });
       }
       const dur = parseInt(duration_minutes);
       if (isNaN(dur) || dur < 1 || dur > 1440) {
         return res.status(400).json({ error: 'Duration must be between 1 and 1440 minutes.' });
+      }
+      if (!isUpcoming) {
+        // Contest is running — only allow extending beyond elapsed time
+        const elapsedMins = Math.floor((now.getTime() - new Date(contest.start_time).getTime()) / 60000);
+        if (dur <= elapsedMins) {
+          return res.status(400).json({
+            error: `Contest started ${elapsedMins} minute${elapsedMins !== 1 ? 's' : ''} ago. New duration must be more than ${elapsedMins} minutes.`,
+          });
+        }
       }
       sets.push(`duration_minutes = $${idx++}`);
       params.push(dur);
@@ -499,7 +515,25 @@ const updateContest = async (req, res) => {
       `UPDATE contests SET ${sets.join(', ')} WHERE id = $${idx}`,
       params
     );
-    global.broadcastToContest(Number(id), 'contest_updated', { message: 'Contest details have been updated.' });
+
+    if (duration_minutes !== undefined) {
+      // Fetch updated row so we broadcast the authoritative new end time
+      const { rows: updRows } = await pool.query(
+        'SELECT start_time, duration_minutes FROM contests WHERE id = $1', [id]
+      );
+      const upd = updRows[0];
+      const newEndTime = new Date(
+        new Date(upd.start_time).getTime() + Number(upd.duration_minutes) * 60000
+      ).toISOString();
+      global.broadcastToContest(Number(id), 'duration_changed', {
+        duration_minutes: upd.duration_minutes,
+        new_end_time:     newEndTime,
+        message:          `Contest duration updated to ${upd.duration_minutes} minutes.`,
+      });
+    } else {
+      global.broadcastToContest(Number(id), 'contest_updated', { message: 'Contest details have been updated.' });
+    }
+
     res.json({ message: 'Contest updated' });
   } catch (err) {
     if (err.code === '23505') return res.status(409).json({ error: 'Contest name already taken' });

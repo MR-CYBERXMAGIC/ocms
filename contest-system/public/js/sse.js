@@ -50,6 +50,12 @@ function initSSE(contestId) {
       if (typeof showToast === 'function') showToast(d.message || '5 minutes remaining!', 'warning');
     });
 
+    _sseSource.addEventListener('duration_changed', e => {
+      const d = JSON.parse(e.data);
+      if (typeof showToast === 'function') showToast(`⏱ ${d.message}`, 'info');
+      if (typeof updateTimerEndTime === 'function') updateTimerEndTime(d.new_end_time);
+    });
+
     _sseSource.onerror = () => {
       _sseSource.close();
       _sseSource = null;
